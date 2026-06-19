@@ -1,8 +1,8 @@
-const CACHE_NAME = 'casur-transportes-gps-v3-operativa-20260618-01';
+const CACHE_NAME = 'casur-transportes-gps-v5-1-campo-20260619-01';
 const APP_SHELL = [
-  './', './index.html', './styles.css?v=3.0.0', './app.js?v=3.0.0', './manifest.json', './offline.html',
+  './', './index.html', './styles.css?v=5.1.0', './app.js?v=5.1.0', './manifest.json', './offline.html',
   './assets/logo_casur.png',
-  './data/poligonos_casur.geojson?v=3.0.0', './data/metadata.json', './data/referencias_operativas.json?v=3.0.0', './data/maestro_fincas.json',
+  './data/poligonos_casur.geojson?v=5.1.0', './data/metadata.json', './data/referencias_operativas.json?v=5.1.0', './data/maestro_fincas.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/favicon.png'
 ];
 
@@ -12,7 +12,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME && k.startsWith('casur-transportes-gps')).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {

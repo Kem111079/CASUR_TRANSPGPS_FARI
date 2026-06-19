@@ -1,40 +1,40 @@
-# Uso en campo · CASUR Transportes GPS V3
+# Guía rápida de uso en campo · CASUR Transportes GPS V5
 
-## Flujo recomendado para el transportista
+## Para el conductor
 
-1. Abrir la app.
-2. Tocar **Activar GPS**.
-3. Esperar que aparezca la ubicación actual.
-4. Ingresar datos básicos: conductor, placa/equipo, origen y destino.
-5. Tocar **Iniciar recorrido**.
-6. Realizar el viaje.
-7. Al terminar, regresar a la app y tocar **Detener recorrido**.
-8. Descargar **Excel resumen** o compartir por WhatsApp.
+1. Abra la app.
+2. Toque **Activar GPS**.
+3. Revise que aparezca **GPS activo**.
+4. Escriba conductor, placa/equipo, origen y destino.
+5. Toque **Iniciar recorrido**.
+6. Al finalizar el viaje, toque **Finalizar recorrido**.
+7. Descargue Excel/PDF o comparta el resumen si se lo solicitan.
 
-## Marcar lugares fuera de lotes
+## Botones principales
 
-Cuando el recorrido vaya por carretera, entrada, báscula, taller, patio o una zona donde no exista lote cercano:
+- **Activar GPS**: ubica el teléfono, pero no inicia la bitácora.
+- **Iniciar recorrido**: empieza el registro formal del viaje.
+- **Finalizar recorrido**: cierra el viaje y lo guarda en historial local.
+- **Marcar lugar**: permite nombrar carretera, entrada, báscula, taller, patio, comunidad o cruce cuando no hay lote/finca cerca.
+- **Ver ruta**: ajusta el mapa para ver la trayectoria.
 
-1. Tocar **Marcar lugar**.
-2. Escribir el nombre de referencia, por ejemplo: `Carretera Nandaime-CASUR`, `Entrada Pansaco`, `Taller Agrícola`.
-3. Elegir el tipo: carretera, entrada, báscula, taller, patio, comunidad, cruce u otro.
-4. Guardar.
+## Modo Conductor
 
-La referencia queda guardada localmente en el celular. En próximos recorridos, la app podrá reconocer ese lugar automáticamente si pasa cerca.
+Es el modo predeterminado. Muestra solo lo necesario para operar en campo.
 
-## Interpretación básica
+## Modo Supervisor
 
-- **Distancia:** km aproximados recorridos.
-- **Duración:** tiempo total desde inicio hasta fin.
-- **Paradas:** tiempos detectados con velocidad baja o sin movimiento.
-- **Tiempo detenido:** tiempo útil para revisar esperas o tiempos muertos.
-- **Lugares:** fincas/lotes o referencias por donde pasó el recorrido.
-- **GPS baja precisión:** revisar ubicación, permisos o ahorro de batería.
+Muestra historial, opciones avanzadas, capas y exportación consolidada. Úselo para revisión, no necesariamente para el transportista.
 
-## Buenas prácticas
+## Recomendaciones prácticas
 
-- Iniciar el recorrido solo cuando realmente empieza el viaje.
-- Detener el recorrido al finalizar la actividad.
-- Marcar referencias recurrentes en carretera o puntos operativos.
-- Descargar el Excel al finalizar para respaldo externo.
-- Evitar modo ahorro de batería durante pruebas GPS.
+- Abra siempre el **enlace https://** publicado (no el archivo suelto), o el GPS y el compartir no funcionarán.
+- Active el GPS en campo abierto antes de iniciar.
+- Al **Iniciar recorrido**, la pantalla se queda encendida sola; no la bloquee para que el GPS no se corte.
+- Evite ahorro extremo de batería durante recorridos largos.
+- No cierre el navegador si el viaje sigue activo. Si la app se recarga, recupera el viaje y reanuda el GPS sola.
+- Si está en carretera o un lugar sin lote cercano, use **Marcar lugar** para que el recorrido quede mejor explicado.
+
+## Respaldo
+
+La app guarda automáticamente el recorrido activo en el navegador. Al finalizar, queda en historial local. Para respaldo externo, descargue Excel/PDF o comparta el recorrido por WhatsApp (adjunta PDF + Excel en teléfonos compatibles).

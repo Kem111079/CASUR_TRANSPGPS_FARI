@@ -1,47 +1,81 @@
-# Checklist de prueba · CASUR Transportes GPS V3 Operativa
+# Checklist de prueba · CASUR Transportes GPS V5
 
-## Carga inicial
+## 1. Carga de app
 
-- [ ] La app abre en HTTPS/GitHub Pages.
-- [ ] No se queda pegada en “Cargando”.
-- [ ] El mapa satelital carga.
-- [ ] La capa de lotes/fincas carga sin mostrar ruido técnico al usuario.
-- [ ] Al tocar un lote, aparece finca/hacienda y código de lote/suerte.
+- [ ] Abre desde GitHub Pages/HTTPS.
+- [ ] No se queda en “Cargando”.
+- [ ] Muestra mapa.
+- [ ] Carga capa de lotes/fincas sin mostrar conteo técnico en móvil.
+- [ ] Muestra únicamente estado GPS como badge principal.
 
-## GPS
+## 2. Modo Conductor
 
-- [ ] `Activar GPS` solicita permiso.
-- [ ] El mapa centra la ubicación actual.
-- [ ] Se muestra una referencia actual: finca/lote, cerca de lote o sin referencia.
-- [ ] Si el GPS falla, aparece mensaje claro.
+- [ ] Inicia en modo conductor.
+- [ ] Historial y opciones avanzadas no saturan la pantalla.
+- [ ] El panel colapsado muestra métricas clave.
+- [ ] Tocar el mapa minimiza la bitácora.
+- [ ] El zoom se ve traslúcido cuando el panel está abierto.
 
-## Recorrido
+## 3. GPS
 
-- [ ] Permite iniciar recorrido.
-- [ ] Dibuja trayectoria en el mapa.
-- [ ] Muestra flechas de rumbo.
-- [ ] Calcula distancia y duración.
-- [ ] Detecta paradas básicas.
-- [ ] Permite detener recorrido aunque la señal GPS sea regular.
+- [ ] Botón Activar GPS solicita permiso.
+- [ ] Centra el mapa en la ubicación.
+- [ ] No inicia registro hasta tocar Iniciar recorrido.
+- [ ] Permite reiniciar GPS desde modo supervisor.
 
-## Referencias operativas
+## 4. Recorrido
 
-- [ ] `Marcar lugar` funciona con GPS activo.
-- [ ] Permite nombrar carretera/entrada/taller/báscula/comunidad.
-- [ ] La referencia queda guardada localmente.
-- [ ] En un recorrido posterior, la referencia se reconoce si se pasa cerca.
+- [ ] Inicia recorrido con folio tipo `CASUR_PLACA_YYYYMMDD_HHMMSS`.
+- [ ] Guarda puntos GPS.
+- [ ] Calcula distancia, duración, velocidad y paradas.
+- [ ] Permite finalizar aunque la señal GPS sea mala.
+- [ ] Guarda recorrido finalizado en historial local.
 
-## Exportaciones
+## 5. Multirecorrido
 
-- [ ] Excel resumen se descarga con nombre automático fechado.
-- [ ] Excel contiene hojas: Resumen, Paradas, Lugares, Detalle GPS, Eventos y Referencias.
-- [ ] El resumen abre fácil y no queda saturado de puntos GPS.
-- [ ] Reporte HTML muestra trayectoria simplificada.
-- [ ] WhatsApp genera texto corto de resumen.
+- [ ] Un nuevo recorrido no borra el anterior.
+- [ ] Historial muestra varios recorridos.
+- [ ] Cada recorrido mantiene folio propio.
+- [ ] Puede cargar ruta anterior en mapa.
+- [ ] Puede borrar un recorrido individual.
 
-## Robustez
+## 6. Exportaciones
 
-- [ ] Si se recarga la página con recorrido activo, se recupera el recorrido.
-- [ ] Si se cambia de app y vuelve, marca posible pausa si aplica.
-- [ ] El historial local conserva recorridos finalizados.
-- [ ] Se puede borrar historial local.
+- [ ] Descarga Excel individual.
+- [ ] Descarga PDF individual.
+- [ ] Genera reporte imprimible.
+- [ ] Comparte por WhatsApp o abre respaldo de texto.
+- [ ] Exporta consolidado en modo supervisor.
+
+## 7. Referencias operativas
+
+- [ ] Permite marcar lugar fuera de shape.
+- [ ] Guarda referencia local.
+- [ ] Usa referencia en próximos puntos cercanos.
+- [ ] Excel muestra lugares/referencias.
+
+## 8. Segundo plano
+
+- [ ] Cambiar a otra app no borra el recorrido.
+- [ ] Al regresar, conserva métricas.
+- [ ] Si hubo pausa larga, registra evento de posible segundo plano.
+
+## 9. Novedades V5.1 (campo)
+
+- [ ] Al iniciar recorrido, la **pantalla se mantiene encendida** sola (Wake Lock) mientras la app está abierta.
+- [ ] Si el teléfono recarga la app en pleno viaje, **recupera el recorrido y reanuda el GPS automáticamente** (no hay que tocar "Reiniciar GPS").
+- [ ] Durante el recorrido, el mapa **sigue al vehículo** y solo recentra cuando se sale de pantalla; al arrastrar el mapa, deja de seguir hasta tocar "Activar GPS".
+- [ ] Si se abre sin HTTPS (archivo local o http), aparece un **aviso claro** de que el GPS y el compartir no funcionarán.
+
+## Cómo correr la prueba de campo (recomendado)
+
+1. Abrir el enlace **https://** publicado (no el archivo local).
+2. Conceder permiso de **ubicación: Permitir siempre / mientras se usa**.
+3. Desactivar el ahorro de batería para el navegador en ese teléfono.
+4. Hacer un viaje corto real (5–10 min) con la pantalla encendida.
+5. Finalizar, descargar **PDF** y **Excel**, y probar **Compartir por WhatsApp**.
+6. Anotar: ¿se mantuvo la pantalla? ¿hubo huecos en la ruta? ¿el WhatsApp adjuntó los archivos o cayó al respaldo de texto?
+
+## Limitación esperada
+
+El GPS con la pantalla apagada o con la app totalmente en segundo plano no está garantizado en PWA. El Wake Lock reduce mucho el problema manteniendo la pantalla activa, pero para seguimiento continuo formal con teléfono bloqueado se requiere app híbrida/nativa.

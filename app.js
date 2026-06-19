@@ -1,29 +1,37 @@
-/* CASUR Transportes GPS V3 Operativa
+/* CASUR Transportes GPS V5 UX Multirecorrido
    PWA de campo para recorridos, lotes/fincas, paradas y exportación operativa.
    Sin backend. Rastreo manual, visible y controlado por el usuario. */
 (function(){
   'use strict';
 
-  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '3.0.0-operativa';
-  const STORAGE_ACTIVE = 'casur_transportes_active_trip_v3';
-  const STORAGE_HISTORY = 'casur_transportes_history_v3';
-  const STORAGE_CFG = 'casur_transportes_cfg_v3';
-  const STORAGE_REFS = 'casur_transportes_referencias_v3';
-  const MAX_HISTORY = 150;
+  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '5.1.0-campo';
+  const STORAGE_ACTIVE = 'casur_transportes_active_trip_v4';
+  const STORAGE_HISTORY = 'casur_transportes_history_v4';
+  const STORAGE_CFG = 'casur_transportes_cfg_v4';
+  const STORAGE_REFS = 'casur_transportes_referencias_v4';
+  const STORAGE_FOLIO = 'casur_transportes_folio_v4';
+  const STORAGE_MODE = 'casur_transportes_ui_mode_v5';
+  const STORAGE_DEVICE = 'casur_transportes_device_id_v5';
+  const LEGACY_STORAGE_ACTIVE = 'casur_transportes_active_trip_v3';
+  const LEGACY_STORAGE_HISTORY = 'casur_transportes_history_v3';
+  const LEGACY_STORAGE_CFG = 'casur_transportes_cfg_v3';
+  const LEGACY_STORAGE_REFS = 'casur_transportes_referencias_v3';
+  const MAX_HISTORY = 300;
   const MAX_POINT_ASSIGN_FEATURES = 12000;
 
   const $ = (id) => document.getElementById(id);
   const el = {
-    bootMsg: $('bootMsg'), map: $('map'), gpsBadge: $('gpsBadge'), refBadge: $('refBadge'), shapeBadge: $('shapeBadge'), saveBadge: $('saveBadge'),
-    btnInstall: $('btnInstall'), btnLocate: $('btnLocate'), btnFitRoute: $('btnFitRoute'), btnToggleNorth: $('btnToggleNorth'), btnToggleLots: $('btnToggleLots'), compassBox: $('compassBox'),
+    bootMsg: $('bootMsg'), appShell: $('appShell'), mapWrap: $('mapWrap'), map: $('map'), gpsBadge: $('gpsBadge'), refBadge: $('refBadge'), shapeBadge: $('shapeBadge'), saveBadge: $('saveBadge'),
+    btnInstall: $('btnInstall'), btnMode: $('btnMode'), btnLocate: $('btnLocate'), btnFitRoute: $('btnFitRoute'), btnToggleNorth: $('btnToggleNorth'), btnToggleLots: $('btnToggleLots'), compassBox: $('compassBox'),
     panel: $('controlPanel'), btnCollapse: $('btnCollapse'), panelGrip: $('panelGrip'),
     mDistance: $('mDistance'), mDuration: $('mDuration'), mSpeed: $('mSpeed'), mStops: $('mStops'),
     driver: $('driver'), plate: $('plate'), equipment: $('equipment'), tripType: $('tripType'), origin: $('origin'), destination: $('destination'), initialNote: $('initialNote'),
     cfgMinSec: $('cfgMinSec'), cfgMinMeters: $('cfgMinMeters'), cfgStopMin: $('cfgStopMin'), cfgStopSpeed: $('cfgStopSpeed'), cfgBadAcc: $('cfgBadAcc'), cfgGapMin: $('cfgGapMin'),
     btnStart: $('btnStart'), btnStop: $('btnStop'), btnRestartGps: $('btnRestartGps'), btnSaveCheckpoint: $('btnSaveCheckpoint'), btnMarkPlace: $('btnMarkPlace'),
     autoReading: $('autoReading'), contextBox: $('contextBox'),
-    btnExcel: $('btnExcel'), btnReport: $('btnReport'), btnWhatsapp: $('btnWhatsapp'), btnCard: $('btnCard'),
-    historyList: $('historyList'), btnClearHistory: $('btnClearHistory'),
+    btnExcel: $('btnExcel'), btnReport: $('btnReport'), btnWhatsapp: $('btnWhatsapp'), btnCard: $('btnCard'), btnPdf: $('btnPdf'), btnShare: $('btnShare'),
+    historyList: $('historyList'), btnClearHistory: $('btnClearHistory'), btnNewTrip: $('btnNewTrip'), btnExportAll: $('btnExportAll'),
+    exportBlock: $('exportBlock'), historyBlock: $('historyBlock'), advancedBlock: $('advancedBlock'),
     activeBar: $('activeBar'), activeBarText: $('activeBarText'), btnStopBar: $('btnStopBar'), toast: $('toast')
   };
 
@@ -48,7 +56,12 @@
     deferredInstall:null,
     isHidden:false,
     lastVisibilityHiddenAt:null,
-    routeFitDone:false
+    routeFitDone:false,
+    mode:'driver',
+    logoDataUrl:null,
+    wakeLock:null,
+    wakeLockWanted:false,
+    followMode:true
   };
 
   const defaultCfg = {
@@ -73,6 +86,41 @@
     return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
   }
   function safeName(s){ return String(s||'SIN_DATO').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48) || 'SIN_DATO'; }
+  function getDeviceId(){
+    let id = localStorage.getItem(STORAGE_DEVICE);
+    if(!id){
+      id = 'DEV_' + fileStamp() + '_' + Math.random().toString(36).slice(2,8).toUpperCase();
+      localStorage.setItem(STORAGE_DEVICE, id);
+    }
+    return id;
+  }
+  function simpleHash(str){
+    str = String(str || '');
+    let h = 2166136261;
+    for(let i=0;i<str.length;i++){
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return ('00000000' + (h >>> 0).toString(16).toUpperCase()).slice(-8);
+  }
+  function nextFolio(fields){
+    fields = fields || {};
+    const ident = safeName(fields.placa || fields.equipo || fields.conductor || 'MOVIL');
+    const folio = `CASUR_${ident}_${fileStamp()}`;
+    const n = parseInt(localStorage.getItem(STORAGE_FOLIO) || '0', 10) || 0;
+    localStorage.setItem(STORAGE_FOLIO, String(n + 1));
+    return folio;
+  }
+  async function loadLogoDataUrl(){
+    if(state.logoDataUrl) return state.logoDataUrl;
+    try{
+      const res = await fetch('assets/logo_casur.png', { cache:'force-cache' });
+      if(!res.ok) throw new Error('logo no disponible');
+      const blob = await res.blob();
+      state.logoDataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(blob); });
+    }catch(e){ console.warn('Logo CASUR no cargado para PDF', e); state.logoDataUrl = null; }
+    return state.logoDataUrl;
+  }
   function fmtKm(m){ return `${(Number(m||0)/1000).toFixed(2)} km`; }
   function fmtKmh(v){ return `${Number(v||0).toFixed(1)} km/h`; }
   function fmtMeters(v){ return `${Number(v||0).toFixed(0)} m`; }
@@ -100,9 +148,23 @@
     clearTimeout(toast._t); toast._t = setTimeout(()=>el.toast.classList.add('hidden'), ms);
   }
   function setBadge(node, text, kind){
+    if(!node) return;
     node.textContent = text;
-    node.className = `badge ${kind || 'neutral'}`;
+    const hidden = node.classList.contains('technical-badge') || node.classList.contains('soft-hidden') || node.classList.contains('hidden') ? ' hidden' : '';
+    node.className = `badge ${kind || 'neutral'}${hidden}`;
   }
+  function on(node, ev, fn, opts){ if(node) node.addEventListener(ev, fn, opts || false); }
+  function setPanelCollapsed(collapsed){
+    if(!el.panel) return;
+    el.panel.classList.toggle('collapsed', !!collapsed);
+    el.panel.classList.toggle('expanded', !collapsed);
+    document.body.classList.toggle('panel-open', !collapsed);
+    if(el.btnCollapse) el.btnCollapse.textContent = collapsed ? '⌃' : '⌄';
+    if(state.map) setTimeout(()=>state.map.invalidateSize(), 180);
+  }
+  function collapsePanel(){ setPanelCollapsed(true); }
+  function expandPanel(){ setPanelCollapsed(false); }
+  function togglePanel(){ setPanelCollapsed(!el.panel.classList.contains('collapsed')); }
   function getCfg(){
     return {
       minSec: clamp(parseFloat(el.cfgMinSec.value), 2, 30, defaultCfg.minSec),
@@ -119,7 +181,7 @@
   function saveCfg(){ localStorage.setItem(STORAGE_CFG, JSON.stringify(getCfg())); }
   function loadCfg(){
     try{
-      const cfg = Object.assign({}, defaultCfg, JSON.parse(localStorage.getItem(STORAGE_CFG)||'{}'));
+      const cfg = Object.assign({}, defaultCfg, JSON.parse(localStorage.getItem(STORAGE_CFG) || localStorage.getItem(LEGACY_STORAGE_CFG) || '{}'));
       el.cfgMinSec.value = cfg.minSec; el.cfgMinMeters.value = cfg.minMeters; el.cfgStopMin.value = cfg.stopMin;
       el.cfgStopSpeed.value = cfg.stopSpeed; el.cfgBadAcc.value = cfg.badAcc; el.cfgGapMin.value = cfg.gapMin;
     }catch(e){ console.warn(e); }
@@ -298,6 +360,8 @@
     if(!window.L){ throw new Error('Leaflet no está disponible'); }
     state.map = L.map('map', { zoomControl:false, preferCanvas:true }).setView([11.44, -85.83], 12);
     L.control.zoom({ position:'bottomleft' }).addTo(state.map);
+    state.map.on('click', ()=>{ if(el.panel && !el.panel.classList.contains('collapsed')) collapsePanel(); });
+    state.map.on('dragstart', ()=>{ if(state.activeTrip) state.followMode = false; });
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20, attribution:'&copy; OpenStreetMap' });
     const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:20, attribution:'Tiles &copy; Esri' });
     esri.addTo(state.map);
@@ -312,7 +376,7 @@
   }
   async function loadLots(){
     try{
-      const res = await fetch('data/poligonos_casur.geojson?v=3.0.0', { cache:'no-store' });
+      const res = await fetch('data/poligonos_casur.geojson?v=5.1.0', { cache:'no-store' });
       if(!res.ok) throw new Error('GeoJSON no disponible');
       state.lotsGeojson = await res.json();
       state.lotFeatures = (state.lotsGeojson.features || []).filter(f => f.geometry && ['Polygon','MultiPolygon'].includes(f.geometry.type));
@@ -324,7 +388,7 @@
           layer.bindPopup(`<b>${escapeHtml(info.finca)}</b><br>Lote: ${escapeHtml(info.lote)}${info.zona ? `<br>Zona: ${escapeHtml(info.zona)}` : ''}${info.area ? `<br>Área: ${escapeHtml(info.area)}` : ''}`);
         }
       }).addTo(state.map);
-      setBadge(el.shapeBadge, `${state.lotFeatures.length.toLocaleString('es-NI')} lotes/fincas`, 'ok');
+      setBadge(el.shapeBadge, `${state.lotFeatures.length.toLocaleString('es-NI')} lotes/fincas cargados`, 'ok');
       try { state.map.fitBounds(state.lotsLayer.getBounds(), { padding:[20,20] }); } catch(e) {}
     }catch(e){
       console.warn(e);
@@ -336,7 +400,7 @@
     const local = loadLocalReferences();
     let defaults = [];
     try{
-      const res = await fetch('data/referencias_operativas.json?v=3.0.0', { cache:'no-store' });
+      const res = await fetch('data/referencias_operativas.json?v=5.1.0', { cache:'no-store' });
       if(res.ok){ const json = await res.json(); defaults = Array.isArray(json) ? json : (json.referencias || []); }
     }catch(e){ console.warn('Referencias operativas no cargadas', e); }
     const all = [];
@@ -349,7 +413,7 @@
     drawReferences();
   }
   function loadLocalReferences(){
-    try{ return JSON.parse(localStorage.getItem(STORAGE_REFS)||'[]') || []; }
+    try{ return JSON.parse(localStorage.getItem(STORAGE_REFS) || localStorage.getItem(LEGACY_STORAGE_REFS) || '[]') || []; }
     catch(e){ return []; }
   }
   function saveLocalReferences(){
@@ -416,6 +480,7 @@
     const trip = state.activeTrip || latestTrip();
     const pts = trip && trip.points || [];
     if(!pts.length || !state.map) return;
+    state.followMode = false;
     const b = L.latLngBounds(pts.map(p=>[p.lat,p.lng]));
     state.map.fitBounds(b, { padding:[35,35], maxZoom:18 });
   }
@@ -428,15 +493,22 @@
   // -------------------- Recorrido --------------------
   function buildTrip(){
     const cfg = getCfg(); saveCfg();
+    const fields = {
+      conductor: clean(el.driver.value), placa: clean(el.plate.value), equipo: clean(el.equipment.value), tipoViaje: el.tripType.value,
+      origen: clean(el.origin.value), destino: clean(el.destination.value), observacionInicial: clean(el.initialNote.value), observacionFinal:''
+    };
+    const deviceId = getDeviceId();
     return {
       id: `CASUR-${Date.now()}`,
+      folio: nextFolio(fields),
+      deviceId,
       version: APP_VERSION,
       status:'active',
+      syncStatus:'activo_local',
+      synced:false,
+      hashLocal:'',
       createdAt: nowIso(), startedAt:null, endedAt:null,
-      fields: {
-        conductor: clean(el.driver.value), placa: clean(el.plate.value), equipo: clean(el.equipment.value), tipoViaje: el.tripType.value,
-        origen: clean(el.origin.value), destino: clean(el.destination.value), observacionInicial: clean(el.initialNote.value), observacionFinal:''
-      },
+      fields,
       cfg, points:[], rawCount:0, rejectedCount:0, distanceM:0, maxSpeedKmh:0,
       stops:[], stopCandidate:null, checkpoints:[], events:[], quality:{ good:0, regular:0, poor:0, avgAcc:0 },
       startContext:null, endContext:null, lastSavedAt:null, lastRaw:null
@@ -445,28 +517,46 @@
   function clean(s){ return String(s||'').trim(); }
   function startTrip(){
     if(state.activeTrip){ toast('Ya existe un recorrido activo. Finalícelo antes de iniciar otro.'); return; }
+    const faltan = [];
+    if(!clean(el.driver.value)) faltan.push('Conductor');
+    if(!clean(el.plate.value)) faltan.push('Placa');
+    if(faltan.length){
+      const seguir = confirm(`Para un control completo conviene registrar: ${faltan.join(' y ')}.\n\n¿Iniciar el recorrido de todos modos?`);
+      if(!seguir){ expandPanel(); toast('Complete los datos del viaje y vuelva a iniciar.'); return; }
+    }
     state.activeTrip = buildTrip();
     state.routeFitDone = false;
+    state.followMode = true;
     setActiveUi(true);
     saveActiveTrip('Inicio de recorrido');
-    toast('Recorrido creado. Solicitando GPS…');
+    requestWakeLock();
+    toast(`Recorrido ${state.activeTrip.folio} creado. Mantenga la app abierta; la pantalla se quedará encendida. Solicitando GPS…`, 5200);
     startWatch(true);
   }
   function stopTrip(){
     const trip = state.activeTrip;
     if(!trip){ toast('No hay recorrido activo.'); return; }
+    const finalNote = prompt('Observación final del recorrido (opcional):', '') || '';
+    trip.fields = trip.fields || {};
+    trip.fields.observacionFinal = clean(finalNote);
     closeStopCandidate(trip, nowIso(), true);
     trip.endedAt = nowIso(); trip.status = 'finished';
     const last = trip.points[trip.points.length-1];
     if(last) trip.endContext = { finca:last.finca, lote:last.lote, zona:last.zona, referencia:last.referencia, tipoReferencia:last.tipoReferencia, lat:last.lat, lng:last.lng };
     trip.metrics = computeMetrics(trip);
+    trip.syncStatus = 'local_pendiente';
+    trip.synced = false;
+    trip.deviceId = trip.deviceId || getDeviceId();
+    trip.hashLocal = simpleHash(JSON.stringify({ folio:trip.folio, id:trip.id, deviceId:trip.deviceId, startedAt:trip.startedAt, endedAt:trip.endedAt, points:(trip.points||[]).length, distanceM:trip.metrics.distanceM }));
     state.history.unshift(stripRuntime(trip));
     state.history = state.history.slice(0, MAX_HISTORY);
     saveHistory();
     localStorage.removeItem(STORAGE_ACTIVE);
     stopWatch();
+    releaseWakeLock();
     state.activeTrip = null;
     setActiveUi(false);
+    if(el.exportBlock) el.exportBlock.open = true;
     drawTrip(trip, { fit:true });
     updateMetrics(trip);
     renderHistory();
@@ -477,6 +567,21 @@
     delete copy.stopCandidate; delete copy.lastRaw;
     copy.metrics = computeMetrics(copy);
     return copy;
+  }
+  // -------------------- Wake Lock (pantalla activa en campo) --------------------
+  async function requestWakeLock(){
+    state.wakeLockWanted = true;
+    if(!('wakeLock' in navigator)) return;
+    try{
+      if(state.wakeLock) return;
+      state.wakeLock = await navigator.wakeLock.request('screen');
+      state.wakeLock.addEventListener('release', ()=>{ state.wakeLock = null; });
+    }catch(e){ console.warn('Wake Lock no disponible', e); state.wakeLock = null; }
+  }
+  async function releaseWakeLock(){
+    state.wakeLockWanted = false;
+    try{ if(state.wakeLock){ await state.wakeLock.release(); } }catch(e){}
+    state.wakeLock = null;
   }
   function startWatch(force){
     if(!state.activeTrip && !force) return;
@@ -514,6 +619,12 @@
       const html = `<div class="vehicle-marker"><span style="transform:rotate(${raw.headingRaw || 0}deg)">➤</span></div>`;
       if(state.lastKnownMarker){ state.lastKnownMarker.setLatLng([raw.lat, raw.lng]); state.lastKnownMarker.setPopupContent(`<b>Ubicación actual</b><br>${localStamp(raw.timestamp)}<br>${escapeHtml(contextForExport(ctx))}<br>Precisión: ${fmtMeters(raw.accuracy)}`); }
       else { state.lastKnownMarker = L.marker([raw.lat,raw.lng], { icon:L.divIcon({ html, className:'', iconSize:[28,28], iconAnchor:[14,14] }) }).addTo(state.markerLayer).bindPopup('Ubicación actual'); }
+      if(state.activeTrip && state.followMode){
+        const ll = L.latLng(raw.lat, raw.lng);
+        if(!state.map.getBounds().pad(-0.25).contains(ll)){
+          state.map.panTo(ll, { animate:true, duration:0.6 });
+        }
+      }
     }
   }
   function handlePosition(pos){
@@ -695,26 +806,29 @@
   // -------------------- Persistencia --------------------
   function saveActiveTrip(reason){
     try{
-      if(state.activeTrip){ localStorage.setItem(STORAGE_ACTIVE, JSON.stringify(stripRuntimeLight(state.activeTrip))); setBadge(el.saveBadge, 'Autosave '+localStamp(), 'ok'); }
+      if(state.activeTrip){ localStorage.setItem(STORAGE_ACTIVE, JSON.stringify(stripRuntimeLight(state.activeTrip))); setBadge(el.saveBadge, 'Guardado local '+localStamp(), 'ok'); }
     }catch(e){ console.warn(e); setBadge(el.saveBadge, 'Error autosave', 'danger'); }
   }
   function stripRuntimeLight(trip){ return JSON.parse(JSON.stringify(trip)); }
   function loadActiveTrip(){
     try{
-      const raw = localStorage.getItem(STORAGE_ACTIVE);
+      const raw = localStorage.getItem(STORAGE_ACTIVE) || localStorage.getItem(LEGACY_STORAGE_ACTIVE);
       if(!raw) return;
       const trip = JSON.parse(raw);
       if(trip && trip.status === 'active'){
         state.activeTrip = trip;
+        state.followMode = true;
         setActiveUi(true);
         drawTrip(trip, { fit:true }); updateMetrics(trip);
-        toast('Se recuperó un recorrido activo guardado. Toque “Reiniciar GPS” para continuar registrando.', 6500);
-        setBadge(el.gpsBadge, 'Recorrido recuperado · GPS pausado', 'warn');
+        toast('Se recuperó el recorrido en curso. Reanudando GPS automáticamente…', 6000);
+        setBadge(el.gpsBadge, 'Reanudando GPS…', 'warn');
+        requestWakeLock();
+        startWatch(true);
       }
     }catch(e){ console.warn(e); }
   }
   function loadHistory(){
-    try{ state.history = JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]') || []; }
+    try{ state.history = JSON.parse(localStorage.getItem(STORAGE_HISTORY) || localStorage.getItem(LEGACY_STORAGE_HISTORY) || '[]') || []; }
     catch(e){ state.history = []; }
     renderHistory();
   }
@@ -722,16 +836,35 @@
   function latestTrip(){ return state.history && state.history[0] || null; }
   function renderHistory(){
     if(!state.history.length){ el.historyList.textContent = 'Sin recorridos guardados.'; return; }
-    el.historyList.innerHTML = state.history.slice(0,12).map((t,idx)=>{
+    el.historyList.innerHTML = state.history.slice(0,25).map((t,idx)=>{
       const m = t.metrics || computeMetrics(t);
-      const name = `${escapeHtml(t.fields?.placa || 'Sin placa')} · ${escapeHtml(t.fields?.conductor || 'Sin conductor')}`;
-      return `<div class="history-item"><b>${name}</b><br>${localStamp(t.startedAt || t.createdAt)} · ${fmtKm(m.distanceM)} · ${fmtDurationText(m.durationMs)} · ${m.stops} paradas
-        <div class="history-actions"><button data-act="view" data-idx="${idx}">Ver ruta</button><button data-act="excel" data-idx="${idx}">Excel</button><button data-act="report" data-idx="${idx}">HTML</button><button data-act="wa" data-idx="${idx}">WhatsApp</button></div></div>`;
+      const f = t.fields || {};
+      const name = `${escapeHtml(f.placa || 'Sin placa')} · ${escapeHtml(f.conductor || 'Sin conductor')}`;
+      const folio = t.folio ? `<span class="folio-chip">${escapeHtml(t.folio)}</span>` : '';
+      const sync = t.synced || t.syncStatus === 'sincronizado';
+      const chip = sync ? '<span class="sync-chip ok">Sincronizado</span>' : '<span class="sync-chip">Pendiente local</span>';
+      return `<div class="history-item"><b>${name}</b> ${folio}<br>${escapeHtml(f.origen || 'Origen no declarado')} → ${escapeHtml(f.destino || 'Destino no declarado')}<br>${localStamp(t.startedAt || t.createdAt)} · ${fmtKm(m.distanceM)} · ${fmtDurationText(m.durationMs)} · ${m.stops} paradas<br>${chip}
+        <div class="history-actions"><button data-act="view" data-idx="${idx}">Ver ruta</button><button data-act="pdf" data-idx="${idx}">PDF</button><button data-act="excel" data-idx="${idx}">Excel</button><button data-act="wa" data-idx="${idx}">Compartir</button><button data-act="report" data-idx="${idx}">Imprimir</button><button class="danger-mini" data-act="delete" data-idx="${idx}">Borrar</button></div></div>`;
     }).join('');
   }
   function setActiveUi(active){
-    el.btnStart.classList.toggle('hidden', active); el.btnStop.classList.toggle('hidden', !active); el.activeBar.classList.toggle('hidden', !active);
-    if(active){ el.panel.classList.add('collapsed'); } else { el.panel.classList.remove('collapsed'); }
+    if(el.btnStart) el.btnStart.classList.toggle('hidden', active);
+    if(el.btnStop) el.btnStop.classList.toggle('hidden', !active);
+    if(el.activeBar) el.activeBar.classList.toggle('hidden', !active);
+    if(active) collapsePanel();
+    else expandPanel();
+  }
+  function prepareNewTrip(){
+    if(state.activeTrip){ toast('Hay un recorrido activo. Finalícelo antes de iniciar uno nuevo.'); expandPanel(); return; }
+    ['origin','destination','initialNote'].forEach(id=>{ if(el[id]) el[id].value=''; });
+    if(el.autoReading) el.autoReading.textContent = 'Listo para registrar un nuevo recorrido. Complete origen/destino y toque Iniciar.';
+    if(el.contextBox) el.contextBox.textContent = state.currentContext ? `Referencia actual: ${contextForExport(state.currentContext)}` : 'Referencia actual: sin punto GPS.';
+    state.routeLayer && state.routeLayer.clearLayers();
+    state.arrowLayer && state.arrowLayer.clearLayers();
+    state.markerLayer && state.markerLayer.clearLayers();
+    if(state.currentPosition) updateLivePosition({lat:state.currentPosition.lat,lng:state.currentPosition.lng,accuracy:state.currentPosition.accuracy||0,timestamp:nowIso(),headingRaw:state.currentPosition.heading||0});
+    expandPanel();
+    toast('Nuevo recorrido preparado. El historial anterior queda guardado.');
   }
 
   // -------------------- Exportación --------------------
@@ -741,20 +874,55 @@
     trip.metrics = computeMetrics(trip);
     return trip;
   }
+  function exportAllHistoryExcel(){
+    if(!state.history.length){ toast('No hay recorridos finalizados para consolidar.'); return; }
+    const recorridos = [['#','Folio','ID','Device ID','Hash local','Estado sync','Conductor','Placa','Equipo','Tipo','Origen','Destino','Inicio','Fin','Distancia km','Duración','Paradas','Tiempo detenido','% detenido','Vel. prom km/h','GPS','Puntos','Lugares principales','Lectura rápida']];
+    const paradas = [['Folio','Recorrido ID','# parada','Conductor','Placa','Inicio','Fin','Duración','Lugar','Tipo','Finca','Lote','Lat','Lng','Alerta']];
+    const lugares = [['Folio','Recorrido ID','Conductor','Placa','Lugar','Tipo','Finca','Lote','Primer paso','Último paso','Puntos GPS','Km aprox.']];
+    const eventos = [['Folio','Recorrido ID','Fecha/hora','Tipo','Detalle']];
+    state.history.forEach((t,idx)=>{
+      const m = t.metrics || computeMetrics(t); const f = t.fields || {}; const folio = t.folio || '';
+      const places = routePlaceSummary(t); const mainPlaces = places.filter(x=>x.tipo !== 'Sin referencia').slice(0,5).map(x=>x.lugar).join('; ');
+      recorridos.push([idx+1,folio,t.id||'',t.deviceId||'',t.hashLocal||'',t.syncStatus||'local_pendiente',f.conductor||'',f.placa||'',f.equipo||'',f.tipoViaje||'',f.origen||'',f.destino||'',t.startedAt?localStamp(t.startedAt):'',t.endedAt?localStamp(t.endedAt):'',round(m.distanceM/1000,2),fmtDurationText(m.durationMs),m.stops,fmtDurationText(m.stopMs),round(m.stoppedPct*100,1),round(m.avgSpeedKmh,1),m.gpsQuality,m.points,mainPlaces,autoReading(t,m)]);
+      (t.stops||[]).forEach((st,i)=>paradas.push([folio,t.id||'',i+1,f.conductor||'',f.placa||'',localStamp(st.start),localStamp(st.end),fmtDurationText(st.durationMs),st.referencia||contextText(st),st.tipoReferencia||'',st.finca||'',st.lote||'',st.lat,st.lng,st.durationMs>=600000?'Parada larga':'']));
+      places.forEach(r=>lugares.push([folio,t.id||'',f.conductor||'',f.placa||'',r.lugar,r.tipo,r.finca,r.lote,localStamp(r.first),localStamp(r.last),r.points,round(r.distanceM/1000,3)]));
+      (t.events||[]).forEach(e=>eventos.push([folio,t.id||'',localStamp(e.timestamp),e.type,e.detail]));
+    });
+    const wbData = { 'Resumen Recorridos':recorridos, 'Paradas':paradas, 'Lugares':lugares, 'Eventos':eventos };
+    const filename = `CASUR_Transportes_Consolidado_${fileStamp()}.xlsx`;
+    if(window.XLSX){
+      const wb = makeWorkbook(wbData, 'CASUR Transportes GPS Consolidado');
+      XLSX.writeFile(wb, filename);
+      toast('Excel consolidado generado.');
+    } else {
+      exportExcelHtml({fields:{placa:'Consolidado'},startedAt:nowIso()}, wbData);
+    }
+  }
+  function makeWorkbook(wbData, title){
+    const wb = XLSX.utils.book_new();
+    wb.Props = { Title: title || 'CASUR Transportes GPS', Subject:'Resumen de recorrido', Author:'CASUR Transportes GPS', CreatedDate:new Date() };
+    Object.entries(wbData).forEach(([name, rows])=>{
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = autoCols(rows);
+      styleWorksheet(ws, name, rows);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+    });
+    return wb;
+  }
+  function excelBlob(trip){
+    if(!window.XLSX) return null;
+    trip.metrics = computeMetrics(trip);
+    const wb = makeWorkbook(workbookData(trip), 'CASUR Transportes GPS');
+    const out = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+    return { blob:new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename:exportFilename(trip,'xlsx') };
+  }
   function exportExcel(trip){
     trip = trip || currentOrLatestTrip(); if(!trip) return;
     trip.metrics = computeMetrics(trip);
     const wbData = workbookData(trip);
     const filename = exportFilename(trip, 'xlsx');
     if(window.XLSX){
-      const wb = XLSX.utils.book_new();
-      wb.Props = { Title:'CASUR Transportes GPS', Subject:'Resumen de recorrido', Author:'CASUR Transportes GPS', CreatedDate:new Date() };
-      Object.entries(wbData).forEach(([name, rows])=>{
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = autoCols(rows);
-        styleWorksheet(ws, name, rows);
-        XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
-      });
+      const wb = makeWorkbook(wbData, 'CASUR Transportes GPS');
       XLSX.writeFile(wb, filename);
       toast('Excel generado. Revise la carpeta de descargas del teléfono/equipo.');
     } else {
@@ -776,6 +944,10 @@
       ['RESUMEN OPERATIVO DEL RECORRIDO'],
       [],
       ['Dato','Valor','Lectura rápida'],
+      ['Folio', trip.folio || 'Sin folio', 'Identificador robusto del recorrido'],
+      ['Device ID', trip.deviceId || getDeviceId(), 'Identificador local del dispositivo para futura app administrador'],
+      ['Estado sync', trip.syncStatus || 'local_pendiente', 'Estado preparado para sincronización futura'],
+      ['Hash local', trip.hashLocal || 'Se genera al finalizar', 'Huella simple local para control de duplicados'],
       ['Conductor', fields.conductor || 'Sin dato', 'Responsable del recorrido'],
       ['Placa / Equipo', `${fields.placa || 'Sin placa'} / ${fields.equipo || 'Sin equipo'}`, 'Identificación del recurso'],
       ['Tipo de viaje', fields.tipoViaje || '', 'Clasificación operativa'],
@@ -873,8 +1045,9 @@
     const lots = routePlaceSummary(trip).slice(0,30).map((r,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(r.lugar)}</td><td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.finca||'')}</td><td>${escapeHtml(r.lote||'')}</td><td>${r.points}</td><td>${round(r.distanceM/1000,2)}</td></tr>`).join('') || '<tr><td colspan="7">Sin lugares referenciados.</td></tr>';
     const pts = (trip.points||[]).filter((_,i)=>i===0 || i===(trip.points.length-1) || i % Math.max(1,Math.floor(trip.points.length/20))===0).map((p,i)=>`<tr><td>${i+1}</td><td>${localStamp(p.timestamp)}</td><td>${p.lat}</td><td>${p.lng}</td><td>${p.accuracy} m</td><td>${fmtKmh(p.speedKmh)}</td><td>${escapeHtml(p.referencia || contextText(p))}</td><td>${escapeHtml(p.tipoReferencia||'')}</td></tr>`).join('');
     const mapNote = routeMapSvg(trip);
+    const logoTag = state.logoDataUrl ? `<img class="logo" src="${state.logoDataUrl}" alt="CASUR" />` : '';
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte de Recorrido CASUR</title><style>${reportCss()}</style></head><body>
-      <header><div><span>CASUR · Control Operativo</span><h1>Reporte de Recorrido · CASUR Transportes GPS</h1></div><div class="stamp">Generado<br>${localStamp()}</div></header>
+      <header><div class="head-left">${logoTag}<div><span>CASUR · Control Operativo</span><h1>Reporte de Recorrido · CASUR Transportes GPS</h1></div></div><div class="stamp">Folio ${escapeHtml(trip.folio||'s/f')}<br>Generado<br>${localStamp()}</div></header>
       <section class="hero"><div><h2>${escapeHtml(trip.fields?.conductor||'Sin conductor')}</h2><p>${escapeHtml(trip.fields?.placa||'Sin placa')} · ${escapeHtml(trip.fields?.equipo||'Sin equipo')} · ${escapeHtml(trip.fields?.tipoViaje||'')}</p><p>${escapeHtml(trip.fields?.origen||'Origen no declarado')} → ${escapeHtml(trip.fields?.destino||'Destino no declarado')}</p></div><div class="reading">${escapeHtml(autoReading(trip,m))}</div></section>
       <section class="kpis"><article><span>Distancia</span><b>${fmtKm(m.distanceM)}</b></article><article><span>Duración</span><b>${fmtDurationText(m.durationMs)}</b></article><article><span>Promedio</span><b>${fmtKmh(m.avgSpeedKmh)}</b></article><article><span>Paradas</span><b>${m.stops}</b></article><article><span>Detenido</span><b>${fmtDurationText(m.stopMs)}</b></article><article><span>GPS</span><b>${m.gpsQuality}</b></article></section>
       <section class="map-section"><h3>Trayectoria del recorrido</h3>${mapNote}<p class="muted">La vista representa la trayectoria GPS con inicio, fin y orientación aproximada. Para revisión completa en campo, abrir la PWA y cargar el recorrido desde historial.</p></section>
@@ -902,26 +1075,257 @@
     const stops = (trip.stops||[]).map((st,i)=>{ const [x,y]=xy(st); return `<circle cx="${x}" cy="${y}" r="9" fill="#B42318"/><text x="${x}" y="${y+4}" font-size="9" fill="#fff" text-anchor="middle">${i+1}</text>`; }).join('');
     return `<svg viewBox="0 0 ${w} ${h}" class="route-svg"><rect x="1" y="1" width="${w-2}" height="${h-2}" rx="18" fill="#eef6ef" stroke="#d8e3dc"/><path d="${d}" fill="none" stroke="#F2B705" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#123C2C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${arrows.join('')}<circle cx="${s[0]}" cy="${s[1]}" r="11" fill="#177245"/><text x="${s[0]}" y="${s[1]+4}" font-size="10" fill="#fff" text-anchor="middle">I</text><circle cx="${e[0]}" cy="${e[1]}" r="11" fill="#B42318"/><text x="${e[0]}" y="${e[1]+4}" font-size="10" fill="#fff" text-anchor="middle">F</text>${stops}<text x="${w-25}" y="30" font-size="15" fill="#B42318" text-anchor="middle">▲</text><text x="${w-25}" y="48" font-size="12" fill="#123C2C" text-anchor="middle">N</text></svg>`;
   }
-  function reportCss(){ return `body{font-family:Arial, sans-serif;color:#17251E;margin:28px;background:#fff}header{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #123C2C;padding-bottom:14px;margin-bottom:18px}header span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#1F6B46;font-weight:bold}h1{font-size:24px;color:#123C2C;margin:4px 0 0}.stamp{text-align:right;color:#6A756E;font-weight:bold}.hero{display:grid;grid-template-columns:1fr 1.25fr;gap:16px;background:#EAF5EE;border:1px solid #DDE8E1;border-radius:16px;padding:16px;margin-bottom:16px}.hero h2{margin:0;color:#123C2C}.hero p{margin:6px 0}.reading{background:#fff;border-left:6px solid #F2B705;border-radius:12px;padding:12px;line-height:1.45}.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px}.kpis article{background:#fff;border:1px solid #DDE8E1;border-radius:14px;padding:12px}.kpis span{display:block;color:#6A756E;font-size:12px;font-weight:bold}.kpis b{font-size:18px;color:#123C2C}.map-section,.conclusion,section{margin-bottom:18px}h3{color:#123C2C;margin:12px 0 8px}.route-svg{width:100%;height:auto;border-radius:16px;display:block}.muted{color:#6A756E;font-size:12px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#123C2C;color:#fff;text-align:left}td,th{border:1px solid #DDE8E1;padding:7px 8px}tr:nth-child(even) td{background:#F7FAF8}.conclusion{border-radius:14px;background:#123C2C;color:#fff;padding:14px;line-height:1.45}footer{border-top:1px solid #DDE8E1;color:#6A756E;font-size:11px;padding-top:10px}@page{size:letter;margin:16mm}@media print{body{margin:0}.kpis{grid-template-columns:repeat(3,1fr)}header{break-after:avoid}section{break-inside:avoid}}`; }
-  function shareWhatsapp(trip){
+  function reportCss(){ return `body{font-family:Arial, sans-serif;color:#17251E;margin:28px;background:#fff}header{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #123C2C;padding-bottom:14px;margin-bottom:18px}.head-left{display:flex;align-items:center;gap:14px}.head-left .logo{height:46px;width:auto}header span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#1F6B46;font-weight:bold}h1{font-size:24px;color:#123C2C;margin:4px 0 0}.stamp{text-align:right;color:#6A756E;font-weight:bold}.hero{display:grid;grid-template-columns:1fr 1.25fr;gap:16px;background:#EAF5EE;border:1px solid #DDE8E1;border-radius:16px;padding:16px;margin-bottom:16px}.hero h2{margin:0;color:#123C2C}.hero p{margin:6px 0}.reading{background:#fff;border-left:6px solid #F2B705;border-radius:12px;padding:12px;line-height:1.45}.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px}.kpis article{background:#fff;border:1px solid #DDE8E1;border-radius:14px;padding:12px}.kpis span{display:block;color:#6A756E;font-size:12px;font-weight:bold}.kpis b{font-size:18px;color:#123C2C}.map-section,.conclusion,section{margin-bottom:18px}h3{color:#123C2C;margin:12px 0 8px}.route-svg{width:100%;height:auto;border-radius:16px;display:block}.muted{color:#6A756E;font-size:12px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#123C2C;color:#fff;text-align:left}td,th{border:1px solid #DDE8E1;padding:7px 8px}tr:nth-child(even) td{background:#F7FAF8}.conclusion{border-radius:14px;background:#123C2C;color:#fff;padding:14px;line-height:1.45}footer{border-top:1px solid #DDE8E1;color:#6A756E;font-size:11px;padding-top:10px}@page{size:letter;margin:16mm}@media print{body{margin:0}.kpis{grid-template-columns:repeat(3,1fr)}header{break-after:avoid}section{break-inside:avoid}}`; }
+  // -------------------- PDF de recorrido (con logo y encabezado) --------------------
+  function projectPoints(pts, x, y, w, h, pad){
+    const lats = pts.map(p=>p.lat), lngs = pts.map(p=>p.lng);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const midLat = (minLat+maxLat)/2;
+    const mx = lng => (lng-minLng) * Math.cos(midLat*Math.PI/180) * 111320;
+    const my = lat => (lat-minLat) * 110540;
+    const dxM = Math.max(mx(maxLng), 1), dyM = Math.max(my(maxLat), 1);
+    const innerW = w - pad*2, innerH = h - pad*2;
+    const scale = Math.min(innerW/dxM, innerH/dyM);
+    const offX = x + pad + (innerW - dxM*scale)/2;
+    const offY = y + pad + (innerH - dyM*scale)/2;
+    return p => [ offX + mx(p.lng)*scale, offY + (dyM - my(p.lat))*scale ];
+  }
+  function drawArrowHead(doc, px, py, brg, size, color){
+    const rad = (Number(brg)||0) * Math.PI/180;
+    const dx = Math.sin(rad), dy = -Math.cos(rad);
+    const tipX = px + dx*size, tipY = py + dy*size;
+    const bX = px - dx*size*0.5, bY = py - dy*size*0.5;
+    const px1 = bX + (-dy)*size*0.6, py1 = bY + (dx)*size*0.6;
+    const px2 = bX - (-dy)*size*0.6, py2 = bY - (dx)*size*0.6;
+    doc.setFillColor(color[0],color[1],color[2]);
+    doc.triangle(tipX,tipY, px1,py1, px2,py2, 'F');
+  }
+  function drawRouteOnPdf(doc, trip, x, y, w, h){
+    const C = { dark:[18,60,44], mid:[31,107,70], gold:[242,183,5], line:[221,232,225], pale:[238,246,239], red:[180,35,24], amber:[183,121,31] };
+    doc.setFillColor(C.pale[0],C.pale[1],C.pale[2]);
+    doc.setDrawColor(C.line[0],C.line[1],C.line[2]);
+    doc.roundedRect(x, y, w, h, 10, 10, 'FD');
+    const pts = (trip.points||[]);
+    if(pts.length < 2){
+      doc.setTextColor(106,117,110); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+      doc.text('Sin trayectoria GPS suficiente para dibujar la ruta.', x + w/2, y + h/2, { align:'center' });
+      return;
+    }
+    const proj = projectPoints(pts, x, y, w, h, 22);
+    const xy = pts.map(proj);
+    // línea base dorada gruesa + verde encima
+    doc.setLineCap('round'); doc.setLineJoin('round');
+    doc.setDrawColor(C.gold[0],C.gold[1],C.gold[2]); doc.setLineWidth(4.2);
+    for(let i=1;i<xy.length;i++) doc.line(xy[i-1][0],xy[i-1][1],xy[i][0],xy[i][1]);
+    doc.setDrawColor(C.dark[0],C.dark[1],C.dark[2]); doc.setLineWidth(1.4);
+    for(let i=1;i<xy.length;i++) doc.line(xy[i-1][0],xy[i-1][1],xy[i][0],xy[i][1]);
+    // flechas de dirección
+    const step = Math.max(1, Math.floor(pts.length/7));
+    for(let i=step;i<pts.length;i+=step){
+      const brg = pts[i].heading || bearing(pts[i-1],pts[i]) || 0;
+      drawArrowHead(doc, xy[i][0], xy[i][1], brg, 5, C.dark);
+    }
+    // paradas
+    (trip.stops||[]).forEach((s,i)=>{
+      const p = proj(s);
+      doc.setFillColor(C.red[0],C.red[1],C.red[2]); doc.circle(p[0],p[1],5.5,'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(7);
+      doc.text(String(i+1), p[0], p[1]+2.4, { align:'center' });
+    });
+    // inicio y fin
+    const s = xy[0], e = xy[xy.length-1];
+    doc.setFillColor(C.mid[0],C.mid[1],C.mid[2]); doc.circle(s[0],s[1],7,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('I', s[0], s[1]+2.8, { align:'center' });
+    doc.setFillColor(C.red[0],C.red[1],C.red[2]); doc.circle(e[0],e[1],7,'F');
+    doc.text('F', e[0], e[1]+2.8, { align:'center' });
+    // rosa de los vientos
+    doc.setFillColor(C.red[0],C.red[1],C.red[2]);
+    drawArrowHead(doc, x+w-20, y+24, 0, 9, C.red);
+    doc.setTextColor(C.dark[0],C.dark[1],C.dark[2]); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('N', x+w-20, y+40, { align:'center' });
+    // leyenda
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(106,117,110);
+    doc.text('I Inicio   F Fin   • Paradas', x+10, y+h-8);
+  }
+  async function buildPdf(trip){
+    if(!(window.jspdf && window.jspdf.jsPDF)) return null;
+    trip.metrics = computeMetrics(trip);
+    const m = trip.metrics, f = trip.fields || {};
+    const logo = await loadLogoDataUrl();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'letter' });
+    const PW = doc.internal.pageSize.getWidth();
+    const PH = doc.internal.pageSize.getHeight();
+    const M = 40;
+    const C = { dark:[18,60,44], mid:[31,107,70], gold:[242,183,5], pale:[234,245,238], line:[221,232,225], muted:[106,117,110], ink:[23,37,30] };
+
+    // --- Encabezado de marca ---
+    doc.setFillColor(C.dark[0],C.dark[1],C.dark[2]);
+    doc.rect(0,0,PW,96,'F');
+    doc.setFillColor(C.gold[0],C.gold[1],C.gold[2]);
+    doc.rect(0,96,PW,4,'F');
+    if(logo){
+      doc.setFillColor(255,255,255); doc.roundedRect(M-6, 22, 150, 52, 8, 8, 'F');
+      try{ doc.addImage(logo, 'PNG', M, 28, 138, 40); }catch(e){ /* logo opcional */ }
+    }
+    doc.setTextColor(242,183,5); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('CASUR · CONTROL DE TRANSPORTE', PW-M, 38, { align:'right' });
+    doc.setTextColor(255,255,255); doc.setFontSize(17);
+    doc.text('Resumen de Recorrido GPS', PW-M, 58, { align:'right' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(215,234,220);
+    doc.text(`Folio ${trip.folio || 'Sin folio'}  ·  Generado ${localStamp()}`, PW-M, 76, { align:'right' });
+
+    let cy = 120;
+    // --- Ficha del viaje ---
+    doc.setFillColor(C.pale[0],C.pale[1],C.pale[2]); doc.setDrawColor(C.line[0],C.line[1],C.line[2]);
+    doc.roundedRect(M, cy, PW-M*2, 64, 8, 8, 'FD');
+    doc.setTextColor(C.dark[0],C.dark[1],C.dark[2]); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text(`${f.conductor || 'Conductor no declarado'}`, M+14, cy+24);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(C.ink[0],C.ink[1],C.ink[2]);
+    doc.text(`Placa: ${f.placa || 'Sin placa'}    Equipo: ${f.equipo || 'Sin equipo'}    Tipo: ${f.tipoViaje || 'Sin tipo'}`, M+14, cy+42);
+    doc.setTextColor(C.mid[0],C.mid[1],C.mid[2]); doc.setFont('helvetica','bold');
+    const origen = f.origen || 'Origen no declarado', destino = f.destino || 'Destino no declarado';
+    const oy = cy+58;
+    doc.text(origen, M+14, oy);
+    const ax = M+14 + doc.getTextWidth(origen) + 10;
+    doc.setDrawColor(C.mid[0],C.mid[1],C.mid[2]); doc.setLineWidth(1.3); doc.line(ax, oy-3, ax+14, oy-3);
+    drawArrowHead(doc, ax+16, oy-3, 90, 4, C.mid);
+    doc.text(destino, ax+24, oy);
+    cy += 80;
+
+    // --- KPIs ---
+    const kpis = [ ['Distancia',fmtKm(m.distanceM)], ['Duración',fmtDurationText(m.durationMs)], ['Promedio',fmtKmh(m.avgSpeedKmh)], ['Paradas',String(m.stops)], ['Detenido',fmtDurationText(m.stopMs)], ['Calidad GPS',m.gpsQuality] ];
+    const gap = 8, cols = 6, cardW = (PW-M*2 - gap*(cols-1))/cols, cardH = 50;
+    kpis.forEach((k,i)=>{
+      const x = M + i*(cardW+gap);
+      doc.setFillColor(255,255,255); doc.setDrawColor(C.line[0],C.line[1],C.line[2]);
+      doc.roundedRect(x, cy, cardW, cardH, 6, 6, 'FD');
+      doc.setTextColor(C.muted[0],C.muted[1],C.muted[2]); doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+      doc.text(k[0].toUpperCase(), x+8, cy+16);
+      doc.setTextColor(C.dark[0],C.dark[1],C.dark[2]); doc.setFontSize(12);
+      doc.text(String(k[1]), x+8, cy+36);
+    });
+    cy += cardH + 18;
+
+    // --- Mapa de la ruta ---
+    doc.setTextColor(C.dark[0],C.dark[1],C.dark[2]); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Trayectoria del recorrido', M, cy);
+    cy += 8;
+    const mapH = 215;
+    drawRouteOnPdf(doc, trip, M, cy, PW-M*2, mapH);
+    cy += mapH + 16;
+
+    // --- Lectura operativa ---
+    const lectura = doc.splitTextToSize(autoReading(trip,m), PW-M*2-24);
+    const lh = 13, boxH = lectura.length*lh + 26;
+    doc.setFillColor(C.dark[0],C.dark[1],C.dark[2]); doc.roundedRect(M, cy, PW-M*2, boxH, 8, 8, 'F');
+    doc.setFillColor(C.gold[0],C.gold[1],C.gold[2]); doc.rect(M, cy, 5, boxH, 'F');
+    doc.setTextColor(242,183,5); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('LECTURA OPERATIVA', M+16, cy+18);
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    doc.text(lectura, M+16, cy+34);
+    cy += boxH + 18;
+
+    // --- Tablas (paradas y lugares) ---
+    const headStyles = { fillColor:C.mid, textColor:[255,255,255], fontStyle:'bold', fontSize:8 };
+    const bodyStyles = { fontSize:8, textColor:C.ink };
+    const altStyles = { fillColor:[247,250,248] };
+    const hasAuto = typeof doc.autoTable === 'function';
+
+    const stopRows = (trip.stops||[]).map((s,i)=>[i+1, localStamp(s.start), fmtDurationText(s.durationMs), (s.referencia||contextText(s)||'Sin referencia'), s.tipoReferencia||'', `${round(s.lat,5)}, ${round(s.lng,5)}`]);
+    const placeRows = routePlaceSummary(trip).slice(0,18).map((r,i)=>[i+1, r.lugar, r.tipo, r.finca||'', r.lote||'', r.points, round(r.distanceM/1000,2)]);
+
+    if(hasAuto){
+      doc.autoTable({
+        startY: cy, margin:{left:M,right:M},
+        head:[['#','Inicio','Duración','Lugar / referencia','Tipo','Ubicación']],
+        body: stopRows.length ? stopRows : [['—','—','—','Sin paradas detectadas','—','—']],
+        headStyles, bodyStyles, alternateRowStyles:altStyles,
+        styles:{ cellPadding:3, lineColor:C.line, lineWidth:.4 },
+        didDrawPage: ()=>pdfChrome(doc, trip),
+        columnStyles:{ 3:{cellWidth:170} }
+      });
+      doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 14, margin:{left:M,right:M},
+        head:[['#','Lugar / referencia','Tipo','Finca','Lote','Puntos','Km']],
+        body: placeRows.length ? placeRows : [['—','Sin lugares referenciados','—','—','—','—','—']],
+        headStyles, bodyStyles, alternateRowStyles:altStyles,
+        styles:{ cellPadding:3, lineColor:C.line, lineWidth:.4 },
+        didDrawPage: ()=>pdfChrome(doc, trip),
+        columnStyles:{ 1:{cellWidth:150} }
+      });
+    } else {
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(C.dark[0],C.dark[1],C.dark[2]);
+      doc.text('Paradas detectadas', M, cy); cy+=14;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(C.ink[0],C.ink[1],C.ink[2]);
+      (stopRows.length?stopRows:[['—','—','—','Sin paradas detectadas','','']]).forEach(r=>{ doc.text(`${r[0]}. ${r[1]} · ${r[2]} · ${r[3]}`, M, cy); cy+=12; if(cy>PH-60){ doc.addPage(); cy=60; } });
+    }
+    pdfChrome(doc, trip);
+    return { blob: doc.output('blob'), filename: exportFilename(trip,'pdf') };
+  }
+  function pdfChrome(doc, trip){
+    const PW = doc.internal.pageSize.getWidth();
+    const PH = doc.internal.pageSize.getHeight();
+    const page = doc.internal.getCurrentPageInfo ? doc.internal.getCurrentPageInfo().pageNumber : (doc.internal.getNumberOfPages());
+    doc.setDrawColor(221,232,225); doc.setLineWidth(.5); doc.line(40, PH-30, PW-40, PH-30);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(106,117,110);
+    doc.text(`CASUR Transportes GPS · ${APP_VERSION} · Folio ${trip.folio||''}`, 40, PH-18);
+    doc.text(`Página ${page}`, PW-40, PH-18, { align:'right' });
+  }
+  async function exportPdf(trip){
     trip = trip || currentOrLatestTrip(); if(!trip) return;
+    toast('Generando PDF del recorrido…', 2200);
+    try{
+      const pkg = await buildPdf(trip);
+      if(pkg){ downloadBlob(pkg.blob, pkg.filename, 'application/pdf'); toast('PDF generado. Revise la carpeta de descargas.'); return pkg; }
+    }catch(e){ console.warn('PDF jsPDF falló, usando respaldo imprimible', e); }
+    exportReport(trip);
+    return null;
+  }
+
+  // -------------------- Compartir (WhatsApp + archivos) --------------------
+  function blobToFile(blob, filename, type){ try{ return new File([blob], filename, { type:type||blob.type }); }catch(e){ return null; } }
+  async function sharePackage(trip){
+    trip = trip || currentOrLatestTrip(); if(!trip) return;
+    toast('Preparando PDF y Excel para compartir…', 2600);
+    const files = [];
+    try{ const p = await buildPdf(trip); if(p && p.blob){ const fl = blobToFile(p.blob, p.filename, 'application/pdf'); if(fl) files.push(fl); } }catch(e){ console.warn('PDF para compartir falló', e); }
+    try{ const x = excelBlob(trip); if(x && x.blob){ const fl = blobToFile(x.blob, x.filename, x.blob.type); if(fl) files.push(fl); } }catch(e){ console.warn('Excel para compartir falló', e); }
+    const text = whatsappText(trip);
+    if(files.length && navigator.canShare && navigator.canShare({ files })){
+      try{
+        await navigator.share({ files, title:`CASUR Recorrido ${trip.folio||''}`, text });
+        toast('Selecciona WhatsApp en el menú para enviar el PDF y el Excel.', 5200);
+        return;
+      }catch(e){ if(e && e.name === 'AbortError'){ return; } console.warn('navigator.share con archivos falló', e); }
+    }
+    // Respaldo: descargar archivos y abrir WhatsApp con texto
+    try{ const p = files.find(f=>f.type==='application/pdf'); if(p) downloadBlob(p, p.name, 'application/pdf'); }catch(e){}
+    try{ const x = files.find(f=>f.name.endsWith('.xlsx')); if(x) downloadBlob(x, x.name, x.type); }catch(e){}
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    toast('Tu teléfono no permite adjuntar desde la web: descargué el PDF y el Excel y abrí WhatsApp. Adjúntalos desde el clip 📎.', 7000);
+  }
+  function whatsappText(trip){
     const m = trip.metrics || computeMetrics(trip), f = trip.fields || {};
     const lugares = routePlaceSummary(trip).filter(x=>x.tipo !== 'Sin referencia').slice(0,3).map(x=>x.lugar).join('; ');
-    const txt = `CASUR Transportes GPS
+    return `*CASUR Transportes GPS*
+Folio: ${trip.folio||'s/f'}
 Recorrido ${trip.status === 'active' ? 'en proceso' : 'finalizado'}
-Conductor: ${f.conductor||''}
-Placa: ${f.placa||''}
-Equipo: ${f.equipo||''}
-Origen: ${f.origen||''}
-Destino: ${f.destino||''}
+Conductor: ${f.conductor||'-'}
+Placa: ${f.placa||'-'}  Equipo: ${f.equipo||'-'}
+Ruta: ${f.origen||'-'} → ${f.destino||'-'}
 Distancia: ${(m.distanceM/1000).toFixed(2)} km
 Duración: ${fmtDurationText(m.durationMs)}
-Paradas: ${m.stops}
-Tiempo detenido: ${fmtDurationText(m.stopMs)}
+Paradas: ${m.stops} (detenido ${fmtDurationText(m.stopMs)})
 Lugares: ${lugares || 'Sin referencia'}
 Fecha: ${localStamp(trip.startedAt||trip.createdAt)}
 GPS: ${m.gpsQuality}`;
-    const url = 'https://wa.me/?text=' + encodeURIComponent(txt);
+  }
+
+
+  function shareWhatsapp(trip){
+    trip = trip || currentOrLatestTrip(); if(!trip) return;
+    const url = 'https://wa.me/?text=' + encodeURIComponent(whatsappText(trip));
     window.open(url, '_blank');
   }
   function makeSummaryCard(trip){
@@ -946,47 +1350,107 @@ GPS: ${m.gpsQuality}`;
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1200);
   }
 
+
+  // -------------------- Modo visual --------------------
+  function setMode(mode){
+    mode = mode === 'supervisor' ? 'supervisor' : 'driver';
+    state.mode = mode;
+    localStorage.setItem(STORAGE_MODE, mode);
+    document.body.classList.toggle('mode-supervisor', mode === 'supervisor');
+    document.body.classList.toggle('mode-driver', mode !== 'supervisor');
+    if(el.btnMode) el.btnMode.textContent = mode === 'supervisor' ? 'Modo Conductor' : 'Modo Supervisor';
+  }
+  function toggleMode(){
+    const next = state.mode === 'supervisor' ? 'driver' : 'supervisor';
+    setMode(next);
+    toast(next === 'supervisor' ? 'Modo Supervisor activado: historial y opciones avanzadas visibles.' : 'Modo Conductor activado: pantalla simplificada para campo.');
+  }
+  function loadMode(){
+    setMode(localStorage.getItem(STORAGE_MODE) === 'supervisor' ? 'supervisor' : 'driver');
+  }
+
   // -------------------- Eventos/UI --------------------
   function bindEvents(){
-    el.btnStart.addEventListener('click', startTrip); el.btnStop.addEventListener('click', stopTrip); el.btnStopBar.addEventListener('click', stopTrip);
-    el.btnRestartGps.addEventListener('click', ()=>{ if(!state.activeTrip){ toast('No hay recorrido activo para reiniciar GPS.'); return; } startWatch(true); toast('GPS reiniciado.'); });
-    el.btnSaveCheckpoint.addEventListener('click', addCheckpoint);
-    el.btnMarkPlace.addEventListener('click', markOperationalPlace);
-    el.btnLocate.addEventListener('click', activateLocation); el.btnFitRoute.addEventListener('click', fitRoute); el.btnToggleLots.addEventListener('click', toggleLots);
-    el.btnToggleNorth.addEventListener('click', ()=>{ el.compassBox.classList.toggle('hidden'); });
-    el.btnExcel.addEventListener('click', ()=>exportExcel()); el.btnReport.addEventListener('click', ()=>exportReport()); el.btnWhatsapp.addEventListener('click', ()=>shareWhatsapp()); el.btnCard.addEventListener('click', ()=>makeSummaryCard());
-    el.btnClearHistory.addEventListener('click', ()=>{ if(confirm('¿Borrar historial local de recorridos finalizados? Esta acción no borra archivos Excel ya descargados.')){ state.history=[]; saveHistory(); renderHistory(); toast('Historial local borrado.'); } });
-    el.historyList.addEventListener('click', (ev)=>{
+    on(el.btnMode, 'click', toggleMode);
+    on(el.btnStart, 'click', ()=>{ expandPanel(); startTrip(); });
+    on(el.btnStop, 'click', stopTrip);
+    on(el.btnStopBar, 'click', stopTrip);
+    on(el.btnRestartGps, 'click', ()=>{ state.followMode = true; startWatch(true); if(state.activeTrip) requestWakeLock(); toast(state.activeTrip ? 'GPS reiniciado. El mapa vuelve a seguirte.' : 'GPS activado para ubicar posición.'); });
+    on(el.btnSaveCheckpoint, 'click', addCheckpoint);
+    on(el.btnMarkPlace, 'click', markOperationalPlace);
+    on(el.btnLocate, 'click', activateLocation);
+    on(el.btnFitRoute, 'click', fitRoute);
+    on(el.btnToggleLots, 'click', toggleLots);
+    on(el.btnToggleNorth, 'click', ()=>{ el.compassBox.classList.toggle('hidden'); toast(el.compassBox.classList.contains('hidden') ? 'Norte oculto.' : 'Norte visible.'); });
+    on(el.btnExcel, 'click', ()=>exportExcel());
+    on(el.btnPdf, 'click', ()=>exportPdf());
+    on(el.btnShare, 'click', ()=>sharePackage());
+    on(el.btnReport, 'click', ()=>exportReport());
+    on(el.btnWhatsapp, 'click', ()=>shareWhatsapp());
+    on(el.btnCard, 'click', ()=>makeSummaryCard());
+    on(el.btnExportAll, 'click', exportAllHistoryExcel);
+    on(el.btnNewTrip, 'click', prepareNewTrip);
+    on(el.btnClearHistory, 'click', ()=>{
+      if(confirm('¿Borrar historial local de recorridos finalizados? Esta acción no borra archivos Excel ya descargados.')){
+        state.history=[]; saveHistory(); renderHistory(); toast('Historial local borrado.');
+      }
+    });
+    on(el.historyList, 'click', (ev)=>{
       const b = ev.target.closest('button[data-act]'); if(!b) return;
       const trip = state.history[Number(b.dataset.idx)]; if(!trip) return;
-      if(b.dataset.act==='view'){ drawTrip(trip,{fit:true}); updateMetrics(trip); toast('Ruta cargada en el mapa.'); }
+      if(b.dataset.act==='view'){ drawTrip(trip,{fit:true}); updateMetrics(trip); collapsePanel(); toast('Ruta cargada en el mapa.'); }
       if(b.dataset.act==='excel') exportExcel(trip);
+      if(b.dataset.act==='pdf') exportPdf(trip);
       if(b.dataset.act==='report') exportReport(trip);
-      if(b.dataset.act==='wa') shareWhatsapp(trip);
+      if(b.dataset.act==='wa') sharePackage(trip);
+      if(b.dataset.act==='delete'){
+        if(confirm('¿Borrar este recorrido del historial local?')){ state.history.splice(Number(b.dataset.idx),1); saveHistory(); renderHistory(); toast('Recorrido borrado del historial local.'); }
+      }
     });
-    el.btnCollapse.addEventListener('click', ()=> el.panel.classList.toggle('collapsed'));
-    el.panelGrip.addEventListener('click', ()=> el.panel.classList.toggle('collapsed'));
-    ['cfgMinSec','cfgMinMeters','cfgStopMin','cfgStopSpeed','cfgBadAcc','cfgGapMin'].forEach(id => $(id).addEventListener('change', saveCfg));
+    on(el.btnCollapse, 'click', togglePanel);
+    on(el.panelGrip, 'click', togglePanel);
+    on(el.panel, 'click', (ev)=>ev.stopPropagation());
+    document.querySelectorAll('.control-block').forEach(d => d.addEventListener('toggle', ()=>{ if(d.open) expandPanel(); }));
+    ['cfgMinSec','cfgMinMeters','cfgStopMin','cfgStopSpeed','cfgBadAcc','cfgGapMin'].forEach(id => on($(id), 'change', saveCfg));
     document.addEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('click', (ev)=>{
+      if(!el.panel || el.panel.classList.contains('collapsed')) return;
+      if(el.panel.contains(ev.target)) return;
+      if(ev.target.closest && ev.target.closest('.map-actions,.leaflet-control,.toast,.active-bar')) return;
+      collapsePanel();
+    });
     window.addEventListener('beforeunload', ()=> saveActiveTrip('beforeunload'));
-    window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); state.deferredInstall=e; el.btnInstall.classList.remove('hidden'); });
-    el.btnInstall.addEventListener('click', async()=>{ if(state.deferredInstall){ state.deferredInstall.prompt(); await state.deferredInstall.userChoice; state.deferredInstall=null; el.btnInstall.classList.add('hidden'); } });
+    window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); state.deferredInstall=e; if(el.btnInstall) el.btnInstall.classList.remove('hidden'); });
+    on(el.btnInstall, 'click', async()=>{ if(state.deferredInstall){ state.deferredInstall.prompt(); await state.deferredInstall.userChoice; state.deferredInstall=null; el.btnInstall.classList.add('hidden'); } });
   }
   function activateLocation(){
-    if(!navigator.geolocation){ toast('GPS no disponible.'); return; }
-    startWatch(true);
-    toast('Ubicación activada. La app mostrará su posición; no registra recorrido hasta tocar Iniciar.');
-    navigator.geolocation.getCurrentPosition((pos)=>{
-      const raw = { timestamp:pos.timestamp ? new Date(pos.timestamp).toISOString() : nowIso(), lat:Number(pos.coords.latitude), lng:Number(pos.coords.longitude), accuracy:Number(pos.coords.accuracy||9999), headingRaw:Number.isFinite(pos.coords.heading)?Number(pos.coords.heading):0 };
-      updateLivePosition(raw);
-      if(state.map) state.map.setView([raw.lat,raw.lng],17);
-    }, handleGeoError, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
+    if(!navigator.geolocation){ toast('GPS no disponible en este navegador.'); return; }
+    state.followMode = true;
+    if(state.activeTrip){
+      // Hay recorrido activo: el GPS ya graba. Solo recentrar el mapa en la posición actual.
+      if(state.currentPosition && state.map){
+        state.map.setView([state.currentPosition.lat, state.currentPosition.lng], state.map.getZoom(), { animate:true });
+        toast('Mapa centrado en tu posición. El GPS sigue grabando el recorrido.');
+      } else {
+        toast('Esperando posición GPS para centrar el mapa…');
+      }
+    } else {
+      // No hay recorrido: activar GPS para mostrar posición (sin grabar)
+      startWatch(true);
+      toast('GPS activado. El mapa mostrará tu posición. Toca Iniciar recorrido cuando estés listo.');
+      navigator.geolocation.getCurrentPosition((pos)=>{
+        const raw = { timestamp:pos.timestamp ? new Date(pos.timestamp).toISOString() : nowIso(), lat:Number(pos.coords.latitude), lng:Number(pos.coords.longitude), accuracy:Number(pos.coords.accuracy||9999), headingRaw:Number.isFinite(pos.coords.heading)?Number(pos.coords.heading):0 };
+        updateLivePosition(raw);
+        if(state.map) state.map.setView([raw.lat,raw.lng], 17, { animate:true });
+      }, handleGeoError, { enableHighAccuracy:true, timeout:12000, maximumAge:0 });
+    }
   }
   function handleVisibility(){
     state.isHidden = document.hidden;
     if(document.hidden){
       state.lastVisibilityHiddenAt = Date.now(); saveActiveTrip('hidden');
     } else if(state.activeTrip){
+      if(state.wakeLockWanted) requestWakeLock();
       const last = state.activeTrip.points[state.activeTrip.points.length-1];
       if(last){
         const gapMs = new Date() - new Date(last.timestamp);
@@ -1002,20 +1466,29 @@ GPS: ${m.gpsQuality}`;
   function tick(){ updateMetrics(state.activeTrip || latestTrip()); }
   function registerServiceWorker(){
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('service-worker.js?v=3.0.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
+      navigator.serviceWorker.register('service-worker.js?v=5.1.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
     }
   }
   function escapeHtml(v){ return String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
 
   async function init(){
-    loadCfg(); loadHistory(); bindEvents();
+    loadCfg(); loadMode(); loadHistory(); bindEvents();
     await initMap();
     loadActiveTrip();
     registerServiceWorker();
+    loadLogoDataUrl();
     el.bootMsg.classList.add('hidden');
     state.timer = setInterval(tick, 1000);
-    setBadge(el.saveBadge, 'Autosave listo', 'ok');
-    toast('CASUR Transportes GPS V3 operativa lista.');
+    setBadge(el.saveBadge, 'Guardado local listo', 'ok');
+    const insecure = !window.isSecureContext && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if(insecure){
+      setBadge(el.gpsBadge, 'Sin HTTPS · GPS no disponible', 'danger');
+      el.bootMsg.classList.remove('hidden');
+      el.bootMsg.innerHTML = 'Esta app necesita abrirse por HTTPS (enlace https://) para usar GPS y compartir. Abra el enlace publicado, no el archivo local.';
+      toast('Atención: sin HTTPS el GPS y el compartir no funcionarán. Use el enlace https:// publicado.', 8000);
+    } else {
+      toast('CASUR Transportes GPS V5 lista. Modo Conductor activo; use Modo Supervisor para historial y opciones avanzadas.');
+    }
   }
 
   init().catch(err=>{

@@ -1,32 +1,56 @@
-# Arquitectura futura híbrida · CASUR Transportes GPS
+# Arquitectura futura · CASUR Transportes GPS
 
-Esta V3 es una PWA robusta de campo, pero está diseñada como puente para migrar después a app híbrida/nativa.
+## Objetivo
 
-## Por qué migrar
+La V4 funciona como PWA GitHub Pages sin backend. Está diseñada como puente para una futura app híbrida/nativa con seguimiento en segundo plano y sincronización hacia una app administrador.
 
-Una PWA no puede garantizar seguimiento GPS continuo en segundo plano en todos los teléfonos. Android y iPhone pueden pausar la pestaña por batería, memoria o privacidad.
+## Limitación de la PWA
 
-## Qué conservar
+La PWA puede registrar GPS mientras el navegador lo permite. En segundo plano, Android/iPhone pueden pausar la ubicación por ahorro de batería o política del navegador. Por eso, el recorrido se autosalva localmente y registra eventos de posible pausa.
 
-- Interfaz móvil.
-- Lógica de recorrido.
-- Cálculo Haversine.
-- Detección de paradas.
-- Referencias operativas.
-- Shape de lotes/fincas.
-- Exportación Excel/HTML.
-- Historial local.
+## Futuro Modo Transporte Pro
 
-## Qué agregar en app híbrida
+Recomendado para operación formal:
 
-- Capacitor o tecnología equivalente.
+- Capacitor o wrapper híbrido.
 - Permiso explícito de ubicación en segundo plano.
-- Notificación persistente: “CASUR Transportes GPS registrando recorrido”.
-- Guardado local con SQLite/IndexedDB reforzado.
-- Reintentos de GPS.
-- Sincronización futura con servidor si CASUR lo aprueba.
-- Políticas claras de consentimiento: iniciar/detener manualmente, sin rastreo oculto.
+- Notificación persistente: `CASUR Transportes GPS registrando recorrido`.
+- Sin rastreo oculto: inicio y fin manuales.
+- Base local SQLite/IndexedDB.
+- Sincronización cuando haya internet.
 
-## Principio operativo
+## Futuro CASUR Transportes Admin
 
-La app debe ser una herramienta de control de recorridos y optimización de transporte, no vigilancia oculta. El usuario siempre debe ver cuándo el GPS está activo.
+La app administrador no debe intentar extraer datos directamente del celular. El flujo correcto es:
+
+1. El transportista finaliza recorrido.
+2. El recorrido queda localmente como `local_pendiente`.
+3. Al tener internet, se envía a base central.
+4. El panel administrador ve recorridos por fecha, conductor, placa, finca, ruta y estado.
+5. El administrador descarga Excel individual o consolidado.
+
+## Estados de sincronización previstos
+
+- `local_pendiente`: guardado en el teléfono, no enviado.
+- `sincronizando`: envío en proceso.
+- `sincronizado`: recibido por la base central.
+- `error_sincronizacion`: quedó pendiente de reenviar.
+
+## Campos mínimos para sincronizar
+
+- ID recorrido.
+- Conductor, placa, equipo.
+- Tipo de viaje.
+- Origen/destino.
+- Inicio/fin.
+- Puntos GPS.
+- Paradas.
+- Lugares/fincas/lotes.
+- Referencias manuales usadas.
+- Métricas operativas.
+- Eventos.
+- Estado GPS.
+
+## Actualización V5
+
+La V5 separa visualmente **Modo Conductor** y **Modo Supervisor**, y agrega campos de preparación para sincronización futura: `deviceId`, `syncStatus`, `hashLocal` y folio robusto. Esta estructura facilita migrar luego a Capacitor sin rehacer el modelo de datos.

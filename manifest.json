@@ -1,8 +1,8 @@
 {
   "name": "CASUR Transportes GPS",
-  "short_name": "Rutas CASUR",
-  "description": "Registro operativo de recorridos de transporte con GPS, fincas, lotes, referencias manuales, paradas y Excel ejecutivo CASUR.",
-  "start_url": "./index.html",
+  "short_name": "GPS CASUR",
+  "description": "Registro, seguimiento y control de transporte CASUR con GPS, fincas, lotes, paradas, folio robusto por viaje, modo conductor/supervisor, PDF con logo, Excel ejecutivo y compartir por WhatsApp.",
+  "start_url": "./index.html?v=5.1.0",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
