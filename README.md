@@ -1,83 +1,52 @@
-# CASUR Transportes GPS · V2 Robusta
+# CASUR Transportes GPS · V3 Operativa
 
-PWA para registrar recorridos operativos de transporte en campo/ingenio, vinculando trayectoria GPS con lotes/fincas CASUR y generando reportes para revisión operativa.
+PWA para registrar recorridos de transporte en campo/ingenio, con trayectoria GPS, fincas/lotes CASUR, referencias operativas para lugares fuera del shape, paradas, historial local y exportación a Excel ejecutivo.
 
 ## Objetivo
 
-Registrar recorridos manuales, medir distancia, duración, velocidad aproximada, rumbo, paradas, calidad GPS y referencias de finca/lote, para apoyar el control de costos, tiempos muertos, desvíos y utilización del recurso transporte.
+La app no es un rastreador oculto. El usuario activa GPS, inicia manualmente un recorrido y lo detiene manualmente. El propósito es generar evidencia operativa para revisar distancia, tiempo, paradas, lugares recorridos y posibles tiempos muertos del recurso transporte.
 
-## Qué incluye esta versión
+## Mejoras V3
 
-- PWA compatible con GitHub Pages.
-- Mapa Leaflet con capa de lotes/fincas desde `data/poligonos_casur.geojson`.
-- Recorrido GPS con línea, flechas de rumbo, inicio, fin, paradas y puntos clave.
-- Botón manual **Iniciar recorrido** y **Finalizar recorrido**.
-- Sin rastreo oculto: solo registra cuando el usuario inicia.
-- Autosave de recorrido activo en `localStorage`.
-- Recuperación de recorrido activo si se cierra o recarga el navegador.
-- Historial local de recorridos finalizados.
-- Exportación Excel `.xlsx` con varias pestañas cuando el módulo XLSX está disponible.
-- Respaldo `.xls` HTML si no carga el módulo XLSX.
-- Reporte HTML imprimible con trayectoria simplificada.
-- Texto para WhatsApp.
-- Tarjeta PNG resumen.
-- Service worker con versión nueva para evitar caché viejo.
+- Shape enriquecido con finca/hacienda desde `Maestro_2627.xlsx` usando `CodSuerte` / código de lote.
+- Se agregan campos `Finca`, `Nombre_Hacienda`, `Finca_Fuente`, `Finca_CodMatch` y `EtiquetaMapa` al GeoJSON.
+- Botón principal `Activar GPS` antes de iniciar el recorrido.
+- Pantalla móvil más compacta: métricas, iniciar/detener y bloques contraíbles.
+- Se ocultan de la pantalla principal el conteo de lotes, autosave, norte y lote; quedan en opciones avanzadas.
+- Botón `Marcar lugar` para nombrar zonas fuera del shape: carretera, entrada, báscula, taller, patio, comunidad o cruce.
+- Jerarquía de referencia: lote/finca dentro del polígono → lote/finca cercana → referencia operativa → sin referencia.
+- Excel más corto y útil: Resumen, Paradas, Lugares, Detalle GPS, Eventos y Referencias.
+- Reporte HTML con trayectoria simplificada y lugares del recorrido.
+- Preparada para migrar después a app híbrida/nativa con seguimiento real en segundo plano.
 
 ## Estructura
 
 ```text
-CASUR_TRANSPORTES_GPS_V2_ROBUSTA/
+CASUR_TRANSPORTES_GPS_V3_OPERATIVA/
 ├─ index.html
 ├─ app.js
 ├─ styles.css
 ├─ manifest.json
 ├─ service-worker.js
 ├─ offline.html
-├─ assets/
-│  └─ logo_casur.png
-├─ icons/
 ├─ data/
 │  ├─ poligonos_casur.geojson
+│  ├─ maestro_fincas.json
+│  ├─ referencias_operativas.json
 │  └─ metadata.json
-├─ docs/
-├─ README.md
-├─ README_USO_CAMPO.md
-└─ CHECKLIST_PRUEBA.md
+├─ icons/
+├─ assets/
+└─ docs/
 ```
 
-## Instalación en GitHub Pages
+## Publicación en GitHub Pages
 
 1. Subir todo el contenido de la carpeta a un repositorio.
 2. Activar GitHub Pages desde `Settings > Pages`.
-3. Usar HTTPS.
-4. Abrir la URL desde el celular.
-5. En Chrome/Android: menú `⋮ > Agregar a pantalla principal`.
-6. En iPhone/Safari: botón compartir > `Agregar a pantalla de inicio`.
+3. Usar `main` y carpeta raíz.
+4. Abrir la URL HTTPS generada por GitHub Pages.
+5. En celular, usar “Agregar a pantalla de inicio” o “Instalar app”.
 
-## Limitación importante de segundo plano
+## Nota sobre segundo plano
 
-Esta versión es PWA. Puede conservar el recorrido y seguir registrando mientras el navegador lo permita, pero **no garantiza GPS continuo en segundo plano** si el teléfono bloquea pantalla, cambia a otra app, activa ahorro de batería o el sistema suspende el navegador.
-
-La arquitectura queda preparada para una migración posterior a app híbrida con Capacitor/native wrapper, donde sí se puede trabajar con ubicación en segundo plano mediante permisos explícitos y notificación visible.
-
-## Exportación Excel
-
-El botón **Descargar Excel** genera un archivo con nombre automático:
-
-```text
-CASUR_Recorrido_[placa/equipo/conductor]_[fecha_hora].xlsx
-```
-
-Pestañas incluidas:
-
-1. Resumen Ejecutivo
-2. Detalle GPS
-3. Paradas
-4. Lotes Fincas
-5. Control Operativo
-6. Eventos
-7. Puntos Clave
-
-## Datos locales
-
-Los recorridos se guardan en el navegador del equipo. Si el usuario borra datos del sitio, cambia de navegador o limpia caché/datos locales, puede perder el historial. Por eso se recomienda descargar el Excel al finalizar recorridos importantes.
+Como PWA, el navegador puede pausar GPS si el usuario cambia de app, bloquea pantalla o tiene ahorro de batería. La app guarda el recorrido activo y marca eventos de posible pausa, pero el seguimiento continuo en segundo plano requiere migración posterior a app híbrida/nativa.

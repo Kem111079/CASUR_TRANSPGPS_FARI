@@ -25,5 +25,9 @@
     -85.5953462,
     11.7873327
   ],
-  "nota_gps": "El GPS requiere HTTPS o localhost. En celular, publicar en HTTPS para instalar y usar ubicación."
+  "nota_gps": "El GPS requiere HTTPS o localhost. En celular, publicar en HTTPS para instalar y usar ubicación.",
+  "version_app": "3.0.0-operativa",
+  "shape_fincas_enriquecidas": 8383,
+  "maestro_fincas": "Maestro_2627.xlsx",
+  "referencias_operativas": "data/referencias_operativas.json"
 }

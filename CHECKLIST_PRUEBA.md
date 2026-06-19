@@ -1,75 +1,47 @@
-# Checklist de prueba · CASUR Transportes GPS V2 Robusta
+# Checklist de prueba · CASUR Transportes GPS V3 Operativa
 
-## 1. Carga inicial
+## Carga inicial
 
-- [ ] La app abre en GitHub Pages con HTTPS.
+- [ ] La app abre en HTTPS/GitHub Pages.
 - [ ] No se queda pegada en “Cargando”.
-- [ ] Se muestra mapa satelital.
-- [ ] Carga capa de lotes/fincas.
-- [ ] Botón Instalar aparece cuando el navegador lo permite.
+- [ ] El mapa satelital carga.
+- [ ] La capa de lotes/fincas carga sin mostrar ruido técnico al usuario.
+- [ ] Al tocar un lote, aparece finca/hacienda y código de lote/suerte.
 
-## 2. GPS
+## GPS
 
-- [ ] Al tocar Iniciar recorrido solicita permiso de ubicación.
-- [ ] Muestra GPS activo.
-- [ ] Muestra precisión GPS.
-- [ ] Muestra velocidad aproximada.
-- [ ] Muestra rumbo.
-- [ ] Permite reiniciar GPS.
-- [ ] Permite finalizar aunque la señal sea mala.
+- [ ] `Activar GPS` solicita permiso.
+- [ ] El mapa centra la ubicación actual.
+- [ ] Se muestra una referencia actual: finca/lote, cerca de lote o sin referencia.
+- [ ] Si el GPS falla, aparece mensaje claro.
 
-## 3. Recorrido
+## Recorrido
 
-- [ ] Dibuja línea del recorrido.
+- [ ] Permite iniciar recorrido.
+- [ ] Dibuja trayectoria en el mapa.
 - [ ] Muestra flechas de rumbo.
-- [ ] Marca inicio.
-- [ ] Marca fin.
-- [ ] Acumula distancia razonable.
-- [ ] Acumula duración en tiempo real.
-- [ ] No duplica demasiados puntos estando detenido.
+- [ ] Calcula distancia y duración.
+- [ ] Detecta paradas básicas.
+- [ ] Permite detener recorrido aunque la señal GPS sea regular.
 
-## 4. Lotes / fincas
+## Referencias operativas
 
-- [ ] El punto actual muestra finca/lote si cae dentro del shape.
-- [ ] El Excel incluye finca/lote por punto GPS.
-- [ ] El resumen incluye lotes/fincas recorridas.
-- [ ] El botón Lotes oculta y muestra la capa.
+- [ ] `Marcar lugar` funciona con GPS activo.
+- [ ] Permite nombrar carretera/entrada/taller/báscula/comunidad.
+- [ ] La referencia queda guardada localmente.
+- [ ] En un recorrido posterior, la referencia se reconoce si se pasa cerca.
 
-## 5. Paradas
+## Exportaciones
 
-- [ ] Detecta parada después del umbral configurado.
-- [ ] Muestra paradas en mapa.
-- [ ] Excel incluye tabla de paradas.
-- [ ] Resumen muestra tiempo detenido.
+- [ ] Excel resumen se descarga con nombre automático fechado.
+- [ ] Excel contiene hojas: Resumen, Paradas, Lugares, Detalle GPS, Eventos y Referencias.
+- [ ] El resumen abre fácil y no queda saturado de puntos GPS.
+- [ ] Reporte HTML muestra trayectoria simplificada.
+- [ ] WhatsApp genera texto corto de resumen.
 
-## 6. Persistencia
+## Robustez
 
-- [ ] Al recargar la página recupera recorrido activo.
-- [ ] Al volver a la app después de cambiar de aplicación no pierde los puntos anteriores.
-- [ ] Si hubo pausa larga, aparece evento de posible pausa/segundo plano.
-- [ ] Al finalizar queda en historial local.
-- [ ] Permite borrar historial local.
-
-## 7. Exportaciones
-
-- [ ] Descarga Excel con nombre fechado.
-- [ ] Excel abre en Windows.
-- [ ] Excel contiene pestañas: Resumen Ejecutivo, Detalle GPS, Paradas, Lotes Fincas, Control Operativo, Eventos, Puntos Clave.
-- [ ] Reporte HTML abre e imprime.
-- [ ] WhatsApp genera texto correcto.
-- [ ] Imagen resumen se descarga como PNG.
-
-## 8. Prueba de campo recomendada
-
-- [ ] Prueba 1: recorrido corto 5–10 minutos con pantalla encendida.
-- [ ] Prueba 2: abrir WhatsApp 2–3 minutos y volver.
-- [ ] Prueba 3: bloquear pantalla 2–3 minutos y volver.
-- [ ] Prueba 4: finalizar y comparar distancia contra odómetro/referencia.
-- [ ] Prueba 5: descargar Excel y validar puntos/lotes/paradas.
-
-## 9. Observaciones para futura app híbrida
-
-- [ ] Documentar teléfonos donde la PWA pausó GPS.
-- [ ] Documentar comportamiento en Android vs iPhone.
-- [ ] Identificar necesidad real de segundo plano continuo.
-- [ ] Preparar migración a Capacitor/native wrapper con notificación persistente y permisos explícitos.
+- [ ] Si se recarga la página con recorrido activo, se recupera el recorrido.
+- [ ] Si se cambia de app y vuelve, marca posible pausa si aplica.
+- [ ] El historial local conserva recorridos finalizados.
+- [ ] Se puede borrar historial local.

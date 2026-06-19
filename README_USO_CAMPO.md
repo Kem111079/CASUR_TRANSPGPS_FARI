@@ -1,38 +1,40 @@
-# Uso en campo · CASUR Transportes GPS
+# Uso en campo · CASUR Transportes GPS V3
 
-## Antes de salir
+## Flujo recomendado para el transportista
 
-1. Abrir la app desde la pantalla principal del teléfono.
-2. Verificar que el mapa carga.
-3. Revisar que la capa indique lotes/fincas cargados.
-4. Completar conductor, placa, equipo, origen, destino y tipo de viaje.
-5. Mantener permisos de ubicación activos.
-6. Evitar modo ahorro de batería cuando el recorrido sea crítico.
+1. Abrir la app.
+2. Tocar **Activar GPS**.
+3. Esperar que aparezca la ubicación actual.
+4. Ingresar datos básicos: conductor, placa/equipo, origen y destino.
+5. Tocar **Iniciar recorrido**.
+6. Realizar el viaje.
+7. Al terminar, regresar a la app y tocar **Detener recorrido**.
+8. Descargar **Excel resumen** o compartir por WhatsApp.
 
-## Durante el recorrido
+## Marcar lugares fuera de lotes
 
-1. Tocar **Iniciar recorrido**.
-2. Confirmar que aparece **GPS activo**.
-3. La app mostrará distancia, duración, velocidad, paradas y referencia de finca/lote.
-4. Puede tocar **Guardar punto clave** para marcar eventos importantes: espera, carga, descarga, taller, acceso dañado, desvío, etc.
-5. Si abre otra aplicación, el recorrido queda guardado, pero el GPS puede pausarse dependiendo del teléfono. Al volver, la app registrará un evento si detecta un espacio largo sin puntos.
+Cuando el recorrido vaya por carretera, entrada, báscula, taller, patio o una zona donde no exista lote cercano:
 
-## Al terminar
+1. Tocar **Marcar lugar**.
+2. Escribir el nombre de referencia, por ejemplo: `Carretera Nandaime-CASUR`, `Entrada Pansaco`, `Taller Agrícola`.
+3. Elegir el tipo: carretera, entrada, báscula, taller, patio, comunidad, cruce u otro.
+4. Guardar.
 
-1. Tocar **Finalizar recorrido**.
-2. Revisar resumen automático.
-3. Descargar el Excel del recorrido.
-4. Generar reporte HTML si requiere imprimir/guardar PDF.
-5. Compartir resumen por WhatsApp si aplica.
+La referencia queda guardada localmente en el celular. En próximos recorridos, la app podrá reconocer ese lugar automáticamente si pasa cerca.
 
-## Recomendaciones operativas
+## Interpretación básica
 
-- Usar la app para comparar recorridos reales contra rutas esperadas.
-- Revisar paradas largas y porcentaje de tiempo detenido.
-- Revisar si el recorrido pasó por la finca/lote esperado.
-- Descargar el Excel al final de cada recorrido importante para evitar pérdida de datos.
-- Para pruebas formales, usar recorridos cortos primero y validar contra odómetro o distancia conocida.
+- **Distancia:** km aproximados recorridos.
+- **Duración:** tiempo total desde inicio hasta fin.
+- **Paradas:** tiempos detectados con velocidad baja o sin movimiento.
+- **Tiempo detenido:** tiempo útil para revisar esperas o tiempos muertos.
+- **Lugares:** fincas/lotes o referencias por donde pasó el recorrido.
+- **GPS baja precisión:** revisar ubicación, permisos o ahorro de batería.
 
-## Privacidad y uso responsable
+## Buenas prácticas
 
-La app no rastrea de forma oculta. Solo registra después de tocar **Iniciar recorrido** y se detiene al tocar **Finalizar recorrido**. El GPS activo se muestra en pantalla. El usuario puede borrar el historial local.
+- Iniciar el recorrido solo cuando realmente empieza el viaje.
+- Detener el recorrido al finalizar la actividad.
+- Marcar referencias recurrentes en carretera o puntos operativos.
+- Descargar el Excel al finalizar para respaldo externo.
+- Evitar modo ahorro de batería durante pruebas GPS.

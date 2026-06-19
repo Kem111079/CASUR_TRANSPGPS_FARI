@@ -1,26 +1,32 @@
-# Arquitectura futura · Modo Transporte Pro
+# Arquitectura futura híbrida · CASUR Transportes GPS
 
-Esta PWA V2 queda preparada conceptualmente para migrar a app híbrida/nativa sin rehacer el proyecto.
+Esta V3 es una PWA robusta de campo, pero está diseñada como puente para migrar después a app híbrida/nativa.
 
 ## Por qué migrar
 
-Una PWA en navegador no puede garantizar GPS continuo cuando el usuario bloquea pantalla, abre otra aplicación o el sistema suspende el navegador. Para seguimiento continuo de transporte, se necesita una app con permiso de ubicación en segundo plano y notificación visible.
+Una PWA no puede garantizar seguimiento GPS continuo en segundo plano en todos los teléfonos. Android y iPhone pueden pausar la pestaña por batería, memoria o privacidad.
 
-## Enfoque recomendado
+## Qué conservar
 
-1. Mantener `index.html`, `styles.css` y parte de la lógica visual.
-2. Separar en la siguiente fase un módulo `gps-provider.js`:
-   - `WebGpsProvider` para PWA.
-   - `NativeGpsProvider` para Capacitor.
-3. Separar persistencia en `storage-provider.js`:
-   - localStorage/IndexedDB en PWA.
-   - SQLite/Filesystem en app híbrida si se requiere.
-4. En app híbrida usar permiso explícito de ubicación en segundo plano.
-5. Mostrar notificación persistente:
-   - “CASUR Transportes GPS registrando recorrido”.
-6. No iniciar seguimiento automáticamente sin acción del usuario.
-7. Mantener botón claro para finalizar recorrido.
+- Interfaz móvil.
+- Lógica de recorrido.
+- Cálculo Haversine.
+- Detección de paradas.
+- Referencias operativas.
+- Shape de lotes/fincas.
+- Exportación Excel/HTML.
+- Historial local.
 
-## Principio de privacidad
+## Qué agregar en app híbrida
 
-La migración no debe convertirse en rastreo oculto. El usuario debe iniciar y detener manualmente, y la app debe indicar claramente que el GPS está activo.
+- Capacitor o tecnología equivalente.
+- Permiso explícito de ubicación en segundo plano.
+- Notificación persistente: “CASUR Transportes GPS registrando recorrido”.
+- Guardado local con SQLite/IndexedDB reforzado.
+- Reintentos de GPS.
+- Sincronización futura con servidor si CASUR lo aprueba.
+- Políticas claras de consentimiento: iniciar/detener manualmente, sin rastreo oculto.
+
+## Principio operativo
+
+La app debe ser una herramienta de control de recorridos y optimización de transporte, no vigilancia oculta. El usuario siempre debe ver cuándo el GPS está activo.

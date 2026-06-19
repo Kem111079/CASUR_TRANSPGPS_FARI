@@ -1,25 +1,26 @@
-/* CASUR Transportes GPS V2 Robusta
+/* CASUR Transportes GPS V3 Operativa
    PWA de campo para recorridos, lotes/fincas, paradas y exportación operativa.
    Sin backend. Rastreo manual, visible y controlado por el usuario. */
 (function(){
   'use strict';
 
-  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '2.0.0-robusta';
-  const STORAGE_ACTIVE = 'casur_transportes_active_trip_v2';
-  const STORAGE_HISTORY = 'casur_transportes_history_v2';
-  const STORAGE_CFG = 'casur_transportes_cfg_v2';
+  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '3.0.0-operativa';
+  const STORAGE_ACTIVE = 'casur_transportes_active_trip_v3';
+  const STORAGE_HISTORY = 'casur_transportes_history_v3';
+  const STORAGE_CFG = 'casur_transportes_cfg_v3';
+  const STORAGE_REFS = 'casur_transportes_referencias_v3';
   const MAX_HISTORY = 150;
-  const MAX_POINT_ASSIGN_FEATURES = 6000;
+  const MAX_POINT_ASSIGN_FEATURES = 12000;
 
   const $ = (id) => document.getElementById(id);
   const el = {
-    bootMsg: $('bootMsg'), map: $('map'), gpsBadge: $('gpsBadge'), shapeBadge: $('shapeBadge'), saveBadge: $('saveBadge'),
+    bootMsg: $('bootMsg'), map: $('map'), gpsBadge: $('gpsBadge'), refBadge: $('refBadge'), shapeBadge: $('shapeBadge'), saveBadge: $('saveBadge'),
     btnInstall: $('btnInstall'), btnLocate: $('btnLocate'), btnFitRoute: $('btnFitRoute'), btnToggleNorth: $('btnToggleNorth'), btnToggleLots: $('btnToggleLots'), compassBox: $('compassBox'),
     panel: $('controlPanel'), btnCollapse: $('btnCollapse'), panelGrip: $('panelGrip'),
     mDistance: $('mDistance'), mDuration: $('mDuration'), mSpeed: $('mSpeed'), mStops: $('mStops'),
     driver: $('driver'), plate: $('plate'), equipment: $('equipment'), tripType: $('tripType'), origin: $('origin'), destination: $('destination'), initialNote: $('initialNote'),
     cfgMinSec: $('cfgMinSec'), cfgMinMeters: $('cfgMinMeters'), cfgStopMin: $('cfgStopMin'), cfgStopSpeed: $('cfgStopSpeed'), cfgBadAcc: $('cfgBadAcc'), cfgGapMin: $('cfgGapMin'),
-    btnStart: $('btnStart'), btnStop: $('btnStop'), btnRestartGps: $('btnRestartGps'), btnSaveCheckpoint: $('btnSaveCheckpoint'),
+    btnStart: $('btnStart'), btnStop: $('btnStop'), btnRestartGps: $('btnRestartGps'), btnSaveCheckpoint: $('btnSaveCheckpoint'), btnMarkPlace: $('btnMarkPlace'),
     autoReading: $('autoReading'), contextBox: $('contextBox'),
     btnExcel: $('btnExcel'), btnReport: $('btnReport'), btnWhatsapp: $('btnWhatsapp'), btnCard: $('btnCard'),
     historyList: $('historyList'), btnClearHistory: $('btnClearHistory'),
@@ -33,9 +34,13 @@
     arrowLayer:null,
     markerLayer:null,
     lastKnownMarker:null,
+    referenceLayer:null,
+    currentPosition:null,
+    currentContext:null,
     lotsVisible:true,
     lotsGeojson:null,
     lotFeatures:[],
+    references:[],
     watchId:null,
     activeTrip:null,
     history:[],
@@ -52,7 +57,9 @@
     stopMin:3,
     stopSpeed:3,
     badAcc:60,
-    gapMin:3
+    gapMin:3,
+    nearbyLotRadius:120,
+    referenceRadius:350
   };
 
   function nowIso(){ return new Date().toISOString(); }
@@ -103,7 +110,9 @@
       stopMin: clamp(parseFloat(el.cfgStopMin.value), 1, 30, defaultCfg.stopMin),
       stopSpeed: clamp(parseFloat(el.cfgStopSpeed.value), 0, 10, defaultCfg.stopSpeed),
       badAcc: clamp(parseFloat(el.cfgBadAcc.value), 20, 300, defaultCfg.badAcc),
-      gapMin: clamp(parseFloat(el.cfgGapMin.value), 1, 60, defaultCfg.gapMin)
+      gapMin: clamp(parseFloat(el.cfgGapMin.value), 1, 60, defaultCfg.gapMin),
+      nearbyLotRadius: defaultCfg.nearbyLotRadius,
+      referenceRadius: defaultCfg.referenceRadius
     };
   }
   function clamp(v,min,max,fallback){ v=Number(v); if(!Number.isFinite(v)) return fallback; return Math.min(max, Math.max(min, v)); }
@@ -156,6 +165,30 @@
     if(g.type === 'MultiPolygon') return g.coordinates.some(poly => pointInPolygonCoords(pt, poly));
     return false;
   }
+
+  function eachCoord(geom, cb){
+    if(!geom) return;
+    if(geom.type === 'Polygon') geom.coordinates.forEach(ring => ring.forEach(c => cb(c)));
+    else if(geom.type === 'MultiPolygon') geom.coordinates.forEach(poly => poly.forEach(ring => ring.forEach(c => cb(c))));
+  }
+  function featureBBox(feature){
+    let minLng=Infinity,minLat=Infinity,maxLng=-Infinity,maxLat=-Infinity;
+    eachCoord(feature && feature.geometry, c => { const lng=Number(c[0]), lat=Number(c[1]); if(Number.isFinite(lat)&&Number.isFinite(lng)){ minLng=Math.min(minLng,lng); maxLng=Math.max(maxLng,lng); minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); } });
+    return Number.isFinite(minLng) ? [minLng,minLat,maxLng,maxLat] : null;
+  }
+  function pointToBBoxDistanceM(pt, bbox){
+    if(!pt || !bbox) return Infinity;
+    const lng = Math.max(bbox[0], Math.min(bbox[2], pt.lng));
+    const lat = Math.max(bbox[1], Math.min(bbox[3], pt.lat));
+    return haversine(pt, {lat,lng});
+  }
+  function normalizeContext(c){
+    if(!c) return { tipo:'Sin referencia', lugar:'Sin referencia', finca:'', lote:'', zona:'', distanciaM:null, fuente:'' };
+    c.finca = c.finca || ''; c.lote = c.lote || ''; c.zona = c.zona || '';
+    c.tipo = c.tipo || (c.finca || c.lote ? 'Lote/Finca' : 'Referencia');
+    c.lugar = c.lugar || (c.finca || c.lote ? `${c.finca || 'Sin finca'}${c.lote ? ' · Lote '+c.lote : ''}` : 'Sin referencia');
+    return c;
+  }
   function propAny(props, keys){
     props = props || {};
     for(const k of keys){
@@ -171,17 +204,56 @@
   function lotInfoFromFeature(feature){
     const p = feature && feature.properties || {};
     return {
-      finca: String(propAny(p, ['Finca','FINCA','Hacienda','HACIENDA','MP_Finca','MP_FINCA','MP_Nom_Fin','MP_NOM_FIN','NOMBRE_FIN','Nombre_Finca','Zona','MP_ZONA']) || 'Sin finca'),
-      lote: String(propAny(p, ['MP_Cod_Lot','MP_Cod_Lote','MP_COD_LOT','Codsuerte','CODSUERTE','Codigo','CODIGO','Lote','LOTE','Cod_Lote','ID_LOTE']) || 'Sin lote'),
+      finca: String(propAny(p, ['Finca','Nombre_Hacienda','FINCA','Hacienda','HACIENDA','MP_Finca','MP_FINCA','MP_Nom_Fin','MP_NOM_FIN','NOMBRE_FIN','Nombre_Finca','Zona','MP_ZONA']) || 'Sin finca'),
+      lote: String(propAny(p, ['CodSuerte','Codsuerte','CODSUERTE','MP_Cod_Lot','MP_Cod_Lote','MP_COD_LOT','Codigo','CODIGO','Lote','LOTE','Suerte','Cod_Lote','ID_LOTE']) || 'Sin lote'),
       zona: String(propAny(p, ['MP_ZONA','Zona','ZONA','Sector','SECTOR']) || ''),
-      area: propAny(p, ['Area','AREA','AREA_HA','Ha','Hectareas','HECTAREAS','MP_AREA']) || ''
+      area: propAny(p, ['Area_Ha','Area','AREA','AREA_HA','Ha','Hectareas','HECTAREAS','MP_AREA']) || ''
     };
   }
   function locateLot(pt){
     if(!pt || !state.lotFeatures.length) return null;
     const features = state.lotFeatures.length > MAX_POINT_ASSIGN_FEATURES ? state.lotFeatures.slice(0, MAX_POINT_ASSIGN_FEATURES) : state.lotFeatures;
-    for(const f of features){ if(pointInFeature(pt, f)) return lotInfoFromFeature(f); }
+    for(const f of features){
+      if(f._bbox && pointToBBoxDistanceM(pt, f._bbox) > 2) continue;
+      if(pointInFeature(pt, f)) return Object.assign(lotInfoFromFeature(f), { tipo:'Lote/Finca', distanciaM:0, fuente:'Shape CASUR' });
+    }
     return null;
+  }
+  function locateNearbyLot(pt, radiusM){
+    if(!pt || !state.lotFeatures.length) return null;
+    const limit = radiusM || defaultCfg.nearbyLotRadius;
+    let best=null;
+    const features = state.lotFeatures.length > MAX_POINT_ASSIGN_FEATURES ? state.lotFeatures.slice(0, MAX_POINT_ASSIGN_FEATURES) : state.lotFeatures;
+    for(const f of features){
+      const d = pointToBBoxDistanceM(pt, f._bbox);
+      if(d <= limit && (!best || d < best.distanciaM)) best = Object.assign(lotInfoFromFeature(f), { tipo:'Cerca de lote/finca', distanciaM:round(d,0), fuente:'Shape CASUR cercano' });
+    }
+    return best;
+  }
+  function locateOperationalReference(pt, radiusM){
+    if(!pt || !state.references.length) return null;
+    const limit = radiusM || defaultCfg.referenceRadius;
+    let best=null;
+    for(const r of state.references){
+      if(!Number.isFinite(Number(r.lat)) || !Number.isFinite(Number(r.lng))) continue;
+      const d = haversine(pt, {lat:Number(r.lat), lng:Number(r.lng)});
+      if(d <= limit && (!best || d < best.distanciaM)) best = Object.assign({}, r, { tipo:r.tipo || 'Referencia', lugar:r.nombre || 'Referencia operativa', distanciaM:round(d,0), fuente:r.source || 'Referencia local' });
+    }
+    return best;
+  }
+  function resolveContext(pt){
+    const inside = locateLot(pt);
+    if(inside) return normalizeContext(Object.assign(inside, { lugar:`${inside.finca} · Lote ${inside.lote}` }));
+    const near = locateNearbyLot(pt, defaultCfg.nearbyLotRadius);
+    if(near) return normalizeContext(Object.assign(near, { lugar:`Cerca de ${near.finca} · Lote ${near.lote}` }));
+    const ref = locateOperationalReference(pt, defaultCfg.referenceRadius);
+    if(ref) return normalizeContext(ref);
+    return normalizeContext(null);
+  }
+  function contextForExport(c){
+    c = normalizeContext(c);
+    const dist = c.distanciaM !== null && c.distanciaM !== undefined ? ` (${Math.round(c.distanciaM)} m)` : '';
+    return `${c.lugar || 'Sin referencia'}${dist}`;
   }
   function routeLotSummary(trip){
     const map = new Map();
@@ -201,6 +273,26 @@
     return Array.from(map.values()).sort((a,b)=>b.points-a.points);
   }
 
+  function routePlaceSummary(trip){
+    const map = new Map();
+    const pts = trip.points || [];
+    for(let i=0;i<pts.length;i++){
+      const p = pts[i];
+      const lugar = p.referencia || (p.finca || p.lote ? `${p.finca || 'Sin finca'} · Lote ${p.lote || 'Sin lote'}` : 'Sin referencia');
+      const tipo = p.tipoReferencia || (p.finca || p.lote ? 'Lote/Finca' : 'Sin referencia');
+      const key = `${tipo}|${lugar}`;
+      if(!map.has(key)) map.set(key, { lugar, tipo, finca:p.finca||'', lote:p.lote||'', zona:p.zona||'', first:p.timestamp, last:p.timestamp, points:0, distanceM:0 });
+      const r = map.get(key);
+      r.last = p.timestamp; r.points += 1;
+      if(i>0){
+        const prev = pts[i-1];
+        const prevLugar = prev.referencia || (prev.finca || prev.lote ? `${prev.finca || 'Sin finca'} · Lote ${prev.lote || 'Sin lote'}` : 'Sin referencia');
+        if(prevLugar === lugar) r.distanceM += haversine(prev,p);
+      }
+    }
+    return Array.from(map.values()).sort((a,b)=>b.points-a.points);
+  }
+
   // -------------------- Mapa --------------------
   async function initMap(){
     if(!window.L){ throw new Error('Leaflet no está disponible'); }
@@ -213,15 +305,18 @@
     state.routeLayer = L.layerGroup().addTo(state.map);
     state.arrowLayer = L.layerGroup().addTo(state.map);
     state.markerLayer = L.layerGroup().addTo(state.map);
+    state.referenceLayer = L.layerGroup().addTo(state.map);
+    await loadReferences();
     await loadLots();
     setTimeout(()=>state.map.invalidateSize(), 250);
   }
   async function loadLots(){
     try{
-      const res = await fetch('data/poligonos_casur.geojson?v=2.0.0', { cache:'no-store' });
+      const res = await fetch('data/poligonos_casur.geojson?v=3.0.0', { cache:'no-store' });
       if(!res.ok) throw new Error('GeoJSON no disponible');
       state.lotsGeojson = await res.json();
       state.lotFeatures = (state.lotsGeojson.features || []).filter(f => f.geometry && ['Polygon','MultiPolygon'].includes(f.geometry.type));
+      state.lotFeatures.forEach(f => { f._bbox = featureBBox(f); f._lotInfo = lotInfoFromFeature(f); });
       state.lotsLayer = L.geoJSON(state.lotsGeojson, {
         style: lotStyle,
         onEachFeature: function(feature, layer){
@@ -237,7 +332,40 @@
       toast('No se pudo cargar la capa de lotes/fincas. La ruta GPS seguirá funcionando.');
     }
   }
-  function lotStyle(){ return { color:'#1F6B46', weight:1, opacity:.75, fillColor:'#D7EADC', fillOpacity:.22 }; }
+  async function loadReferences(){
+    const local = loadLocalReferences();
+    let defaults = [];
+    try{
+      const res = await fetch('data/referencias_operativas.json?v=3.0.0', { cache:'no-store' });
+      if(res.ok){ const json = await res.json(); defaults = Array.isArray(json) ? json : (json.referencias || []); }
+    }catch(e){ console.warn('Referencias operativas no cargadas', e); }
+    const all = [];
+    const seen = new Set();
+    defaults.concat(local).forEach(r=>{
+      const id = r.id || `${r.nombre || 'ref'}_${r.lat}_${r.lng}`;
+      if(!seen.has(id)){ seen.add(id); all.push(Object.assign({id, source:'Referencia local'}, r)); }
+    });
+    state.references = all.filter(r => Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng)));
+    drawReferences();
+  }
+  function loadLocalReferences(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_REFS)||'[]') || []; }
+    catch(e){ return []; }
+  }
+  function saveLocalReferences(){
+    const local = state.references.filter(r => (r.source || '').includes('local') || (r.source || '').includes('usuario') || r.manual);
+    localStorage.setItem(STORAGE_REFS, JSON.stringify(local.slice(-500)));
+  }
+  function drawReferences(){
+    if(!state.referenceLayer) return;
+    state.referenceLayer.clearLayers();
+    state.references.forEach(r=>{
+      L.marker([Number(r.lat),Number(r.lng)], { icon:L.divIcon({ html:'<div class="ref-marker">⌖</div>', className:'', iconSize:[26,26], iconAnchor:[13,13] }) })
+        .bindPopup(`<b>${escapeHtml(r.nombre || 'Referencia')}</b><br>${escapeHtml(r.tipo || 'Lugar operativo')}<br>${escapeHtml(r.observacion || '')}`)
+        .addTo(state.referenceLayer);
+    });
+  }
+  function lotStyle(){ return { color:'#1F6B46', weight:.9, opacity:.55, fillColor:'#D7EADC', fillOpacity:.16 }; }
   function drawTrip(trip, opts={}){
     state.routeLayer.clearLayers(); state.arrowLayer.clearLayers(); state.markerLayer.clearLayers();
     const pts = trip && trip.points || [];
@@ -250,7 +378,7 @@
     const last = pts[pts.length-1];
     const markerHtml = `<div class="vehicle-marker"><span style="transform:rotate(${last.heading || 0}deg)">➤</span></div>`;
     state.lastKnownMarker = L.marker([last.lat,last.lng], { icon:L.divIcon({ html:markerHtml, className:'', iconSize:[28,28], iconAnchor:[14,14] }) })
-      .bindPopup(`<b>Última posición</b><br>${localStamp(last.timestamp)}<br>Velocidad: ${fmtKmh(last.speedKmh)}<br>Rumbo: ${Number(last.heading||0).toFixed(0)}° ${degToCompass(last.heading)}<br>${escapeHtml(last.finca || 'Sin finca')} · ${escapeHtml(last.lote || 'Sin lote')}`)
+      .bindPopup(`<b>Última posición</b><br>${localStamp(last.timestamp)}<br>Velocidad: ${fmtKmh(last.speedKmh)}<br>Rumbo: ${Number(last.heading||0).toFixed(0)}° ${degToCompass(last.heading)}<br>${escapeHtml(last.referencia || contextText(last))}`)
       .addTo(state.markerLayer);
     if(opts.fit || !state.routeFitDone){ fitRoute(); state.routeFitDone = true; }
   }
@@ -276,7 +404,7 @@
     }
     (trip.stops || []).forEach((s, idx)=>{
       L.marker([s.lat, s.lng], { icon:L.divIcon({ html:`<div class="stop-marker">${idx+1}</div>`, className:'', iconSize:[24,24], iconAnchor:[12,12] }) })
-        .bindPopup(`<b>Parada ${idx+1}</b><br>${fmtDurationText(s.durationMs)}<br>${localStamp(s.start)} - ${localStamp(s.end)}<br>${escapeHtml(s.finca || 'Sin finca')} · ${escapeHtml(s.lote || 'Sin lote')}`)
+        .bindPopup(`<b>Parada ${idx+1}</b><br>${fmtDurationText(s.durationMs)}<br>${localStamp(s.start)} - ${localStamp(s.end)}<br>${escapeHtml(s.referencia || contextText(s))}`)
         .addTo(state.markerLayer);
     });
     (trip.checkpoints || []).forEach((c, idx)=>{
@@ -330,7 +458,7 @@
     closeStopCandidate(trip, nowIso(), true);
     trip.endedAt = nowIso(); trip.status = 'finished';
     const last = trip.points[trip.points.length-1];
-    if(last) trip.endContext = { finca:last.finca, lote:last.lote, zona:last.zona, lat:last.lat, lng:last.lng };
+    if(last) trip.endContext = { finca:last.finca, lote:last.lote, zona:last.zona, referencia:last.referencia, tipoReferencia:last.tipoReferencia, lat:last.lat, lng:last.lng };
     trip.metrics = computeMetrics(trip);
     state.history.unshift(stripRuntime(trip));
     state.history = state.history.slice(0, MAX_HISTORY);
@@ -375,9 +503,20 @@
     addEvent('GPS_ERROR', msg);
     toast('GPS: '+msg+'. Puede finalizar el recorrido aunque la señal sea mala.', 5200);
   }
+
+  function updateLivePosition(raw){
+    state.currentPosition = { lat:raw.lat, lng:raw.lng, timestamp:raw.timestamp, accuracy:raw.accuracy, heading:raw.headingRaw };
+    const ctx = resolveContext(state.currentPosition);
+    state.currentContext = ctx;
+    if(el.refBadge) setBadge(el.refBadge, ctx.tipo === 'Sin referencia' ? 'Sin referencia cercana' : ctx.lugar, ctx.tipo === 'Sin referencia' ? 'warn' : 'ok');
+    if(el.contextBox) el.contextBox.textContent = `Referencia actual: ${contextForExport(ctx)} · Precisión ${fmtMeters(raw.accuracy)}.`;
+    if(state.map){
+      const html = `<div class="vehicle-marker"><span style="transform:rotate(${raw.headingRaw || 0}deg)">➤</span></div>`;
+      if(state.lastKnownMarker){ state.lastKnownMarker.setLatLng([raw.lat, raw.lng]); state.lastKnownMarker.setPopupContent(`<b>Ubicación actual</b><br>${localStamp(raw.timestamp)}<br>${escapeHtml(contextForExport(ctx))}<br>Precisión: ${fmtMeters(raw.accuracy)}`); }
+      else { state.lastKnownMarker = L.marker([raw.lat,raw.lng], { icon:L.divIcon({ html, className:'', iconSize:[28,28], iconAnchor:[14,14] }) }).addTo(state.markerLayer).bindPopup('Ubicación actual'); }
+    }
+  }
   function handlePosition(pos){
-    const trip = state.activeTrip;
-    if(!trip) return;
     const c = pos.coords || {};
     const t = pos.timestamp ? new Date(pos.timestamp).toISOString() : nowIso();
     const raw = {
@@ -387,6 +526,9 @@
       headingRaw: Number.isFinite(c.heading) ? Number(c.heading) : null
     };
     if(!Number.isFinite(raw.lat) || !Number.isFinite(raw.lng)) return;
+    updateLivePosition(raw);
+    const trip = state.activeTrip;
+    if(!trip) return;
     trip.rawCount += 1;
     const cfg = trip.cfg || getCfg();
     classifyQuality(trip, raw.accuracy, cfg);
@@ -409,17 +551,19 @@
       saveActiveTrip('Raw GPS');
       return;
     }
-    const lot = locateLot(raw) || {};
+    const ctx = resolveContext(raw);
     const point = {
       index: trip.points.length + 1,
       timestamp:raw.timestamp, lat:raw.lat, lng:raw.lng, accuracy:raw.accuracy,
       speedKmh:round(speedKmh,2), heading:round(head,1), rumbo:degToCompass(head), segmentM:round(segM,2),
       distanceM:round((trip.distanceM || 0) + (lastSaved ? segM : 0),2),
-      finca: lot.finca || '', lote: lot.lote || '', zona: lot.zona || '', gpsQuality: qualityLabel(raw.accuracy, cfg)
+      finca: ctx.finca || '', lote: ctx.lote || '', zona: ctx.zona || '',
+      referencia: ctx.lugar || '', tipoReferencia: ctx.tipo || '', distanciaReferenciaM: ctx.distanciaM, fuenteReferencia: ctx.fuente || '',
+      gpsQuality: qualityLabel(raw.accuracy, cfg)
     };
     if(!trip.startedAt){
       trip.startedAt = point.timestamp;
-      trip.startContext = { finca:point.finca, lote:point.lote, zona:point.zona, lat:point.lat, lng:point.lng };
+      trip.startContext = { finca:point.finca, lote:point.lote, zona:point.zona, referencia:point.referencia, tipoReferencia:point.tipoReferencia, lat:point.lat, lng:point.lng };
     }
     trip.distanceM = point.distanceM;
     trip.maxSpeedKmh = Math.max(trip.maxSpeedKmh||0, point.speedKmh||0);
@@ -463,10 +607,11 @@
     const dur = durationMs(c.start, endTime);
     const threshold = (trip.cfg && trip.cfg.stopMin || defaultCfg.stopMin) * 60000;
     if(force || dur >= threshold){
-      const lot = locateLot({lat:c.lat, lng:c.lng}) || {};
+      const ctx = resolveContext({lat:c.lat, lng:c.lng}) || {};
       trip.stops.push({
         index: trip.stops.length+1, start:c.start, end:endTime, durationMs:dur, lat:round(c.lat,6), lng:round(c.lng,6),
-        samples:c.samples, maxRadiusM:round(c.maxRadiusM||0,1), finca:lot.finca||'', lote:lot.lote||'', zona:lot.zona||'', note:''
+        samples:c.samples, maxRadiusM:round(c.maxRadiusM||0,1), finca:ctx.finca||'', lote:ctx.lote||'', zona:ctx.zona||'',
+        referencia:ctx.lugar||'', tipoReferencia:ctx.tipo||'', distanciaReferenciaM:ctx.distanciaM, fuenteReferencia:ctx.fuente||'', note:''
       });
       addEvent('PARADA_DETECTADA', `Parada ${trip.stops.length} de ${fmtDurationText(dur)}`);
     }
@@ -477,11 +622,31 @@
     if(!trip || !trip.points.length){ toast('No hay punto GPS para guardar punto clave.'); return; }
     const last = trip.points[trip.points.length-1];
     const note = prompt('Comentario para el punto clave:', '') || '';
-    trip.checkpoints.push({ timestamp:nowIso(), lat:last.lat, lng:last.lng, finca:last.finca, lote:last.lote, zona:last.zona, note });
+    trip.checkpoints.push({ timestamp:nowIso(), lat:last.lat, lng:last.lng, finca:last.finca, lote:last.lote, zona:last.zona, referencia:last.referencia, tipoReferencia:last.tipoReferencia, note });
     addEvent('PUNTO_CLAVE', note || 'Punto clave agregado por usuario.');
     drawTrip(trip);
     saveActiveTrip('Punto clave');
     toast('Punto clave guardado.');
+  }
+
+  function markOperationalPlace(){
+    const pt = state.currentPosition || (state.activeTrip && state.activeTrip.points && state.activeTrip.points[state.activeTrip.points.length-1]);
+    if(!pt){ toast('Active GPS primero para marcar este lugar.'); startWatch(true); return; }
+    const nombre = prompt('Nombre de referencia para este lugar (ej. Entrada Pansaco, Carretera Nandaime-CASUR, Taller, Báscula):', '') || '';
+    if(!clean(nombre)){ toast('No se guardó referencia: falta nombre.'); return; }
+    const tipo = prompt('Tipo de lugar: carretera, entrada, báscula, taller, patio, comunidad, cruce u otro:', 'carretera') || 'otro';
+    const observacion = prompt('Observación opcional:', '') || '';
+    const ref = { id:`REF-${Date.now()}`, nombre:clean(nombre), tipo:clean(tipo), lat:round(pt.lat,6), lng:round(pt.lng,6), observacion:clean(observacion), createdAt:nowIso(), source:'usuario local', manual:true };
+    state.references.push(ref);
+    saveLocalReferences(); drawReferences();
+    const trip = state.activeTrip;
+    if(trip){
+      trip.checkpoints.push({ timestamp:nowIso(), lat:ref.lat, lng:ref.lng, referencia:ref.nombre, tipoReferencia:ref.tipo, note:'Referencia operativa creada: '+ref.nombre });
+      addEvent('REFERENCIA_CREADA', `${ref.nombre} (${ref.tipo})`);
+      saveActiveTrip('Referencia operativa');
+    }
+    updateLivePosition({ lat:ref.lat, lng:ref.lng, accuracy:pt.accuracy || 0, timestamp:nowIso(), headingRaw:pt.heading || 0 });
+    toast('Referencia guardada. En próximos recorridos se usará para identificar esta zona.');
   }
   function addEvent(type, detail){
     const trip = state.activeTrip;
@@ -512,13 +677,19 @@
     el.activeBarText.textContent = `${fmtKm(m.distanceM)} · ${fmtDuration(m.durationMs)} · ${m.stops} paradas`;
     el.autoReading.textContent = autoReading(trip, m);
     const last = trip.points && trip.points[trip.points.length-1];
-    if(last){ el.contextBox.textContent = `Referencia actual: ${last.finca || 'Sin finca'} · Lote ${last.lote || 'Sin lote'} · Precisión ${fmtMeters(last.accuracy)} · Rumbo ${last.rumbo || degToCompass(last.heading)}.`; }
+    if(last){
+      const ctx = normalizeContext({finca:last.finca, lote:last.lote, zona:last.zona, lugar:last.referencia, tipo:last.tipoReferencia, distanciaM:last.distanciaReferenciaM, fuente:last.fuenteReferencia});
+      el.contextBox.textContent = `Referencia actual: ${contextForExport(ctx)} · Precisión ${fmtMeters(last.accuracy)} · Rumbo ${last.rumbo || degToCompass(last.heading)}.`;
+      if(el.refBadge) setBadge(el.refBadge, ctx.tipo === 'Sin referencia' ? 'Sin referencia cercana' : ctx.lugar, ctx.tipo === 'Sin referencia' ? 'warn' : 'ok');
+    }
   }
   function autoReading(trip, m){
-    const lots = routeLotSummary(trip).slice(0,4).map(x => `${x.finca} / ${x.lote}`).join('; ');
+    const lugares = routePlaceSummary(trip).filter(x=>x.tipo !== 'Sin referencia').slice(0,4).map(x => x.lugar).join('; ');
+    const sinRef = routePlaceSummary(trip).find(x=>x.tipo === 'Sin referencia');
     const alerta = m.stoppedPct > .35 ? 'Revisar tiempos muertos: el recorrido muestra una proporción alta de tiempo detenido.' : 'El recorrido no muestra una proporción crítica de tiempo detenido.';
     const gps = m.gpsQuality === 'Baja' ? 'La calidad GPS fue baja en una parte relevante del trayecto.' : `La calidad GPS fue ${m.gpsQuality.toLowerCase()} en la mayor parte del trayecto.`;
-    return `Recorrido ${trip.status === 'active' ? 'en proceso' : 'finalizado'} con ${fmtKm(m.distanceM)}, duración ${fmtDurationText(m.durationMs)}, ${m.stops} paradas detectadas y velocidad promedio de ${m.avgSpeedKmh.toFixed(1)} km/h. ${gps} ${alerta}${lots ? ' Referencias principales: '+lots+'.' : ''}`;
+    const refMsg = lugares ? ' Lugares principales: '+lugares+'.' : (sinRef ? ' Hay tramos sin referencia; use “Marcar lugar” para nombrar carretera, entrada o punto operativo.' : '');
+    return `Recorrido ${trip.status === 'active' ? 'en proceso' : 'finalizado'} con ${fmtKm(m.distanceM)}, duración ${fmtDurationText(m.durationMs)}, ${m.stops} paradas detectadas y velocidad promedio de ${m.avgSpeedKmh.toFixed(1)} km/h. ${gps} ${alerta}${refMsg}`;
   }
 
   // -------------------- Persistencia --------------------
@@ -581,6 +752,7 @@
       Object.entries(wbData).forEach(([name, rows])=>{
         const ws = XLSX.utils.aoa_to_sheet(rows);
         ws['!cols'] = autoCols(rows);
+        styleWorksheet(ws, name, rows);
         XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
       });
       XLSX.writeFile(wb, filename);
@@ -593,36 +765,82 @@
     const m = trip.metrics || computeMetrics(trip);
     const fields = trip.fields || {};
     const lotRows = routeLotSummary(trip);
+    const placeRows = routePlaceSummary(trip);
+    const longStops = (trip.stops||[]).filter(s=>s.durationMs>=600000).length;
+    const sinRef = placeRows.find(x=>x.tipo === 'Sin referencia');
+    const mainPlaces = placeRows.filter(x=>x.tipo !== 'Sin referencia').slice(0,6).map(x=>x.lugar).join('; ');
+    const startText = contextText(trip.startContext);
+    const endText = contextText(trip.endContext);
     const resumen = [
-      ['CASUR TRANSPORTES GPS · RESUMEN EJECUTIVO'],
-      ['Versión', APP_VERSION], ['ID recorrido', trip.id], ['Estado', trip.status], ['Generado', localStamp()],
-      [], ['DATOS DEL VIAJE'],
-      ['Conductor', fields.conductor || ''], ['Placa', fields.placa || ''], ['Equipo', fields.equipo || ''], ['Tipo de viaje', fields.tipoViaje || ''], ['Origen declarado', fields.origen || ''], ['Destino declarado', fields.destino || ''],
-      ['Inicio GPS', trip.startedAt ? localStamp(trip.startedAt) : 'Sin inicio GPS'], ['Fin GPS', trip.endedAt ? localStamp(trip.endedAt) : 'En proceso'],
-      ['Finca/lote inicial', contextText(trip.startContext)], ['Finca/lote final', contextText(trip.endContext)],
-      [], ['INDICADORES OPERATIVOS'],
-      ['Distancia total km', round(m.distanceM/1000,2)], ['Duración total', fmtDuration(m.durationMs)], ['Tiempo en movimiento', fmtDuration(m.movingMs)], ['Tiempo detenido', fmtDuration(m.stopMs)], ['% tiempo detenido', round(m.stoppedPct*100,1)+'%'],
-      ['Velocidad promedio km/h', round(m.avgSpeedKmh,1)], ['Velocidad en movimiento km/h', round(m.movingSpeedKmh,1)], ['Velocidad máxima km/h', round(m.maxSpeedKmh,1)], ['Paradas detectadas', m.stops], ['Puntos GPS guardados', m.points], ['Puntos crudos recibidos', m.rawCount], ['Puntos filtrados', m.rejectedCount], ['Precisión promedio m', round(m.avgAccuracy,1)], ['Calidad GPS', m.gpsQuality],
-      [], ['LECTURA EJECUTIVA'], [autoReading(trip,m)],
-      [], ['OBSERVACIONES'], ['Inicial', fields.observacionInicial || ''], ['Final', fields.observacionFinal || '']
+      ['CASUR TRANSPORTES GPS'],
+      ['RESUMEN OPERATIVO DEL RECORRIDO'],
+      [],
+      ['Dato','Valor','Lectura rápida'],
+      ['Conductor', fields.conductor || 'Sin dato', 'Responsable del recorrido'],
+      ['Placa / Equipo', `${fields.placa || 'Sin placa'} / ${fields.equipo || 'Sin equipo'}`, 'Identificación del recurso'],
+      ['Tipo de viaje', fields.tipoViaje || '', 'Clasificación operativa'],
+      ['Origen declarado', fields.origen || '', 'Dato digitado por usuario'],
+      ['Destino declarado', fields.destino || '', 'Dato digitado por usuario'],
+      ['Inicio GPS', trip.startedAt ? localStamp(trip.startedAt) : 'Sin inicio GPS', startText || 'Sin referencia inicial'],
+      ['Fin GPS', trip.endedAt ? localStamp(trip.endedAt) : 'En proceso', endText || 'Sin referencia final'],
+      [],
+      ['Indicador','Valor','Interpretación'],
+      ['Distancia total', fmtKm(m.distanceM), 'Base para revisar km operativos y costo por viaje'],
+      ['Duración total', fmtDurationText(m.durationMs), 'Tiempo total entre inicio y fin GPS'],
+      ['Tiempo detenido', fmtDurationText(m.stopMs), `${round(m.stoppedPct*100,1)}% del tiempo total`],
+      ['Tiempo en movimiento', fmtDurationText(m.movingMs), 'Tiempo estimado con avance efectivo'],
+      ['Paradas detectadas', m.stops, `${longStops} paradas mayores o iguales a 10 min`],
+      ['Velocidad promedio', fmtKmh(m.avgSpeedKmh), 'Promedio sobre tiempo total'],
+      ['Velocidad en movimiento', fmtKmh(m.movingSpeedKmh), 'Promedio sin tiempo detenido'],
+      ['Velocidad máxima', fmtKmh(m.maxSpeedKmh), 'Dato aproximado del GPS'],
+      ['Calidad GPS', m.gpsQuality, `Precisión promedio ${round(m.avgAccuracy,1)} m`],
+      ['Puntos GPS guardados', m.points, `${m.rejectedCount} puntos filtrados para evitar duplicados o baja calidad`],
+      [],
+      ['Lugares principales', mainPlaces || 'Sin lugares referenciados', sinRef ? 'Hay tramos sin referencia: usar “Marcar lugar” en campo.' : 'Referencias suficientes para revisión rápida'],
+      ['Lectura ejecutiva', autoReading(trip,m), ''],
+      ['Recomendación', operationalRecommendation(trip,m), ''],
+      [],
+      ['Observación inicial', fields.observacionInicial || '', ''],
+      ['Observación final', fields.observacionFinal || '', ''],
+      ['Generado', localStamp(), APP_VERSION]
     ];
-    const gps = [['#','timestamp','fecha_hora','lat','lng','precision_m','velocidad_kmh','rumbo_grados','rumbo_texto','segmento_m','distancia_acumulada_km','calidad_gps','finca','lote','zona']].concat((trip.points||[]).map((p,i)=>[i+1,p.timestamp,localStamp(p.timestamp),p.lat,p.lng,p.accuracy,p.speedKmh,p.heading,p.rumbo,p.segmentM,round((p.distanceM||0)/1000,3),p.gpsQuality,p.finca,p.lote,p.zona]));
-    const stops = [['#','inicio','fin','duracion','duracion_min','lat','lng','radio_max_m','finca','lote','zona','muestras','observacion']].concat((trip.stops||[]).map((s,i)=>[i+1,localStamp(s.start),localStamp(s.end),fmtDuration(s.durationMs),round(s.durationMs/60000,1),s.lat,s.lng,s.maxRadiusM,s.finca,s.lote,s.zona,s.samples,s.note||'']));
-    const lots = [['#','finca','lote','zona','primer_paso','ultimo_paso','puntos_gps','distancia_aprox_km']].concat(lotRows.map((r,i)=>[i+1,r.finca,r.lote,r.zona,localStamp(r.first),localStamp(r.last),r.points,round(r.distanceM/1000,3)]));
-    const control = [
-      ['CASUR TRANSPORTES GPS · CONTROL OPERATIVO'], [],
-      ['Indicador','Valor','Lectura'],
-      ['Tiempo detenido %', round(m.stoppedPct*100,1)+'%', m.stoppedPct>.35?'Alto: revisar esperas/desvíos.':'Dentro de rango inicial.'],
-      ['Paradas mayores a 10 min', (trip.stops||[]).filter(s=>s.durationMs>=600000).length, 'Paradas largas afectan utilización del recurso.'],
-      ['Distancia total', fmtKm(m.distanceM), 'Base para validar km operativos y costo por viaje.'],
-      ['Velocidad promedio', fmtKmh(m.avgSpeedKmh), 'Velocidad baja puede indicar espera, camino lento o carga/descarga.'],
-      ['Calidad GPS', m.gpsQuality, 'Usar con cautela si calidad es baja.'],
-      ['Lotes/fincas con referencia', lotRows.length, 'Permite trazabilidad contra áreas CASUR.'],
-      [], ['Recomendación automática'], [operationalRecommendation(trip,m)]
-    ];
-    const events = [['timestamp','fecha_hora','tipo','detalle']].concat((trip.events||[]).map(e=>[e.timestamp,localStamp(e.timestamp),e.type,e.detail]));
-    const checkpoints = [['#','fecha_hora','lat','lng','finca','lote','zona','comentario']].concat((trip.checkpoints||[]).map((c,i)=>[i+1,localStamp(c.timestamp),c.lat,c.lng,c.finca,c.lote,c.zona,c.note]));
-    return { 'Resumen Ejecutivo':resumen, 'Detalle GPS':gps, 'Paradas':stops, 'Lotes Fincas':lots, 'Control Operativo':control, 'Eventos':events, 'Puntos Clave':checkpoints };
+    const stops = [['#','Inicio','Fin','Duración','Min detenido','Lugar / referencia','Tipo lugar','Finca','Lote','Lat','Lng','Alerta','Observación']]
+      .concat((trip.stops||[]).map((s,i)=>[i+1,localStamp(s.start),localStamp(s.end),fmtDurationText(s.durationMs),round(s.durationMs/60000,1),s.referencia || contextText(s),s.tipoReferencia || (s.finca||s.lote?'Lote/Finca':'Sin referencia'),s.finca||'',s.lote||'',s.lat,s.lng,s.durationMs>=600000?'Parada larga':'',s.note||'']));
+    if(stops.length===1) stops.push(['','','','','','Sin paradas detectadas','','','','','','','']);
+    const lugares = [['#','Lugar / referencia','Tipo','Finca','Lote','Zona','Primer paso','Último paso','Puntos GPS','Km aprox.','Lectura']]
+      .concat(placeRows.map((r,i)=>[i+1,r.lugar,r.tipo,r.finca,r.lote,r.zona,localStamp(r.first),localStamp(r.last),r.points,round(r.distanceM/1000,3),r.tipo==='Sin referencia'?'Nombrar carretera/lugar si es recurrente':'Referencia útil para revisión']));
+    const gps = [['#','Fecha/hora','Lat','Lng','Precisión m','Velocidad km/h','Rumbo','Segmento m','Km acumulados','Lugar / referencia','Tipo referencia','Finca','Lote','Calidad GPS']]
+      .concat((trip.points||[]).map((p,i)=>[i+1,localStamp(p.timestamp),p.lat,p.lng,p.accuracy,p.speedKmh,p.rumbo || degToCompass(p.heading),p.segmentM,round((p.distanceM||0)/1000,3),p.referencia || contextText(p),p.tipoReferencia || '',p.finca||'',p.lote||'',p.gpsQuality]));
+    const eventos = [['Fecha/hora','Tipo','Detalle']].concat((trip.events||[]).map(e=>[localStamp(e.timestamp),e.type,e.detail]));
+    if(eventos.length===1) eventos.push(['','','Sin eventos registrados.']);
+    const referencias = [['Nombre','Tipo','Lat','Lng','Observación','Fuente','Creada']]
+      .concat((state.references||[]).map(r=>[r.nombre||'',r.tipo||'',r.lat,r.lng,r.observacion||'',r.source||'',r.createdAt?localStamp(r.createdAt):'']));
+    if(referencias.length===1) referencias.push(['Sin referencias manuales','','','','Use “Marcar lugar” en la app para nombrar carreteras, entradas, talleres, básculas o comunidades.','','']);
+    return { 'Resumen':resumen, 'Paradas':stops, 'Lugares':lugares, 'Detalle GPS':gps, 'Eventos':eventos, 'Referencias':referencias };
+  }
+  function styleWorksheet(ws, name, rows){
+    if(!ws || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const dark = '123C2C', mid = '1F6B46', pale = 'EAF5EE', gold = 'F2B705', line = 'DDE8E1', danger = 'FFEDEB';
+    for(let R=range.s.r; R<=range.e.r; ++R){
+      for(let C=range.s.c; C<=range.e.c; ++C){
+        const addr = XLSX.utils.encode_cell({r:R,c:C});
+        if(!ws[addr]) continue;
+        ws[addr].s = ws[addr].s || {};
+        ws[addr].s.font = { name:'Arial', sz:10, color:{rgb:'10251B'} };
+        ws[addr].s.alignment = { vertical:'center', wrapText:true };
+        ws[addr].s.border = { top:{style:'thin',color:{rgb:line}}, bottom:{style:'thin',color:{rgb:line}}, left:{style:'thin',color:{rgb:line}}, right:{style:'thin',color:{rgb:line}} };
+      }
+    }
+    // títulos principales
+    ['A1','A2'].forEach((addr,idx)=>{ if(ws[addr]) ws[addr].s = { font:{name:'Arial',sz:idx?14:16,bold:true,color:{rgb:idx?'FFFFFF':'F2B705'}}, fill:{fgColor:{rgb:dark}}, alignment:{horizontal:'center',vertical:'center'} }; });
+    if(name==='Resumen'){
+      ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:2}},{s:{r:1,c:0},e:{r:1,c:2}}];
+      [3,12].forEach(r=>{ for(let c=0;c<=2;c++){ const addr=XLSX.utils.encode_cell({r,c}); if(ws[addr]) ws[addr].s={font:{name:'Arial',sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:mid}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:{bottom:{style:'thin',color:{rgb:line}}}}; } });
+      rows.forEach((row,i)=>{ if(String(row[0]||'').includes('Tiempo detenido') && parseFloat(String(row[2]||'').replace(',','.'))>35){ const addr='A'+(i+1); if(ws[addr]) ws[addr].s.fill={fgColor:{rgb:danger}}; } });
+    } else {
+      for(let C=range.s.c; C<=range.e.c; ++C){ const addr=XLSX.utils.encode_cell({r:0,c:C}); if(ws[addr]) ws[addr].s={font:{name:'Arial',sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:mid}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:{bottom:{style:'thin',color:{rgb:line}}}}; }
+    }
   }
   function operationalRecommendation(trip,m){
     const rec = [];
@@ -632,7 +850,7 @@
     if(!rec.length) rec.push('Recorrido útil para revisión operativa inicial. Comparar contra rutas estándar, costo por km y tiempos esperados por frente/finca.');
     return rec.join(' ');
   }
-  function contextText(c){ if(!c) return ''; return `${c.finca || 'Sin finca'} · ${c.lote || 'Sin lote'}${c.zona ? ' · '+c.zona : ''}`; }
+  function contextText(c){ if(!c) return ''; return contextForExport({finca:c.finca, lote:c.lote, zona:c.zona, lugar:c.referencia, tipo:c.tipoReferencia, distanciaM:c.distanciaReferenciaM, fuente:c.fuenteReferencia}); }
   function autoCols(rows){
     const widths = [];
     rows.forEach(r => r.forEach((v,i)=>{ widths[i] = Math.max(widths[i]||10, Math.min(42, String(v ?? '').length + 2)); }));
@@ -651,18 +869,18 @@
   function exportReport(trip){
     trip = trip || currentOrLatestTrip(); if(!trip) return;
     const m = trip.metrics || computeMetrics(trip);
-    const rowsStops = (trip.stops||[]).map((s,i)=>`<tr><td>${i+1}</td><td>${localStamp(s.start)}</td><td>${fmtDurationText(s.durationMs)}</td><td>${escapeHtml(s.finca||'')}</td><td>${escapeHtml(s.lote||'')}</td><td>${s.lat}, ${s.lng}</td></tr>`).join('') || '<tr><td colspan="6">Sin paradas detectadas.</td></tr>';
-    const lots = routeLotSummary(trip).slice(0,30).map((r,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(r.finca)}</td><td>${escapeHtml(r.lote)}</td><td>${escapeHtml(r.zona||'')}</td><td>${r.points}</td><td>${round(r.distanceM/1000,2)}</td></tr>`).join('') || '<tr><td colspan="6">Sin referencia de lotes/fincas.</td></tr>';
-    const pts = (trip.points||[]).filter((_,i)=>i===0 || i===(trip.points.length-1) || i % Math.max(1,Math.floor(trip.points.length/20))===0).map((p,i)=>`<tr><td>${i+1}</td><td>${localStamp(p.timestamp)}</td><td>${p.lat}</td><td>${p.lng}</td><td>${p.accuracy} m</td><td>${fmtKmh(p.speedKmh)}</td><td>${escapeHtml(p.finca||'')}</td><td>${escapeHtml(p.lote||'')}</td></tr>`).join('');
+    const rowsStops = (trip.stops||[]).map((s,i)=>`<tr><td>${i+1}</td><td>${localStamp(s.start)}</td><td>${fmtDurationText(s.durationMs)}</td><td>${escapeHtml(s.referencia || contextText(s))}</td><td>${escapeHtml(s.tipoReferencia||'')}</td><td>${s.lat}, ${s.lng}</td></tr>`).join('') || '<tr><td colspan="6">Sin paradas detectadas.</td></tr>';
+    const lots = routePlaceSummary(trip).slice(0,30).map((r,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(r.lugar)}</td><td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.finca||'')}</td><td>${escapeHtml(r.lote||'')}</td><td>${r.points}</td><td>${round(r.distanceM/1000,2)}</td></tr>`).join('') || '<tr><td colspan="7">Sin lugares referenciados.</td></tr>';
+    const pts = (trip.points||[]).filter((_,i)=>i===0 || i===(trip.points.length-1) || i % Math.max(1,Math.floor(trip.points.length/20))===0).map((p,i)=>`<tr><td>${i+1}</td><td>${localStamp(p.timestamp)}</td><td>${p.lat}</td><td>${p.lng}</td><td>${p.accuracy} m</td><td>${fmtKmh(p.speedKmh)}</td><td>${escapeHtml(p.referencia || contextText(p))}</td><td>${escapeHtml(p.tipoReferencia||'')}</td></tr>`).join('');
     const mapNote = routeMapSvg(trip);
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte de Recorrido CASUR</title><style>${reportCss()}</style></head><body>
       <header><div><span>CASUR · Control Operativo</span><h1>Reporte de Recorrido · CASUR Transportes GPS</h1></div><div class="stamp">Generado<br>${localStamp()}</div></header>
       <section class="hero"><div><h2>${escapeHtml(trip.fields?.conductor||'Sin conductor')}</h2><p>${escapeHtml(trip.fields?.placa||'Sin placa')} · ${escapeHtml(trip.fields?.equipo||'Sin equipo')} · ${escapeHtml(trip.fields?.tipoViaje||'')}</p><p>${escapeHtml(trip.fields?.origen||'Origen no declarado')} → ${escapeHtml(trip.fields?.destino||'Destino no declarado')}</p></div><div class="reading">${escapeHtml(autoReading(trip,m))}</div></section>
       <section class="kpis"><article><span>Distancia</span><b>${fmtKm(m.distanceM)}</b></article><article><span>Duración</span><b>${fmtDurationText(m.durationMs)}</b></article><article><span>Promedio</span><b>${fmtKmh(m.avgSpeedKmh)}</b></article><article><span>Paradas</span><b>${m.stops}</b></article><article><span>Detenido</span><b>${fmtDurationText(m.stopMs)}</b></article><article><span>GPS</span><b>${m.gpsQuality}</b></article></section>
       <section class="map-section"><h3>Trayectoria del recorrido</h3>${mapNote}<p class="muted">La vista representa la trayectoria GPS con inicio, fin y orientación aproximada. Para revisión completa en campo, abrir la PWA y cargar el recorrido desde historial.</p></section>
-      <section><h3>Paradas detectadas</h3><table><thead><tr><th>#</th><th>Inicio</th><th>Duración</th><th>Finca</th><th>Lote</th><th>Ubicación</th></tr></thead><tbody>${rowsStops}</tbody></table></section>
-      <section><h3>Lotes / fincas referenciadas</h3><table><thead><tr><th>#</th><th>Finca</th><th>Lote</th><th>Zona</th><th>Puntos</th><th>Km aprox.</th></tr></thead><tbody>${lots}</tbody></table></section>
-      <section><h3>Puntos principales GPS</h3><table><thead><tr><th>#</th><th>Hora</th><th>Lat</th><th>Lng</th><th>Precisión</th><th>Vel.</th><th>Finca</th><th>Lote</th></tr></thead><tbody>${pts}</tbody></table></section>
+      <section><h3>Paradas detectadas</h3><table><thead><tr><th>#</th><th>Inicio</th><th>Duración</th><th>Lugar / referencia</th><th>Tipo</th><th>Ubicación</th></tr></thead><tbody>${rowsStops}</tbody></table></section>
+      <section><h3>Lugares del recorrido</h3><table><thead><tr><th>#</th><th>Lugar / referencia</th><th>Tipo</th><th>Finca</th><th>Lote</th><th>Puntos</th><th>Km aprox.</th></tr></thead><tbody>${lots}</tbody></table></section>
+      <section><h3>Puntos principales GPS</h3><table><thead><tr><th>#</th><th>Hora</th><th>Lat</th><th>Lng</th><th>Precisión</th><th>Vel.</th><th>Lugar / referencia</th><th>Tipo</th></tr></thead><tbody>${pts}</tbody></table></section>
       <section class="conclusion"><b>Lectura operativa:</b> ${escapeHtml(operationalRecommendation(trip,m))}</section>
       <footer>CASUR Transportes GPS · ${APP_VERSION} · Reporte imprimible desde navegador</footer>
       <script>window.onload=function(){ setTimeout(function(){ window.print(); }, 700); }<\/script>
@@ -688,7 +906,21 @@
   function shareWhatsapp(trip){
     trip = trip || currentOrLatestTrip(); if(!trip) return;
     const m = trip.metrics || computeMetrics(trip), f = trip.fields || {};
-    const txt = `CASUR Transportes GPS\nRecorrido ${trip.status === 'active' ? 'en proceso' : 'finalizado'}\nConductor: ${f.conductor||''}\nPlaca: ${f.placa||''}\nEquipo: ${f.equipo||''}\nOrigen: ${f.origen||''}\nDestino: ${f.destino||''}\nDistancia: ${(m.distanceM/1000).toFixed(2)} km\nDuración: ${fmtDurationText(m.durationMs)}\nParadas: ${m.stops}\nTiempo detenido: ${fmtDurationText(m.stopMs)}\nFecha: ${localStamp(trip.startedAt||trip.createdAt)}\nGPS: ${m.gpsQuality}`;
+    const lugares = routePlaceSummary(trip).filter(x=>x.tipo !== 'Sin referencia').slice(0,3).map(x=>x.lugar).join('; ');
+    const txt = `CASUR Transportes GPS
+Recorrido ${trip.status === 'active' ? 'en proceso' : 'finalizado'}
+Conductor: ${f.conductor||''}
+Placa: ${f.placa||''}
+Equipo: ${f.equipo||''}
+Origen: ${f.origen||''}
+Destino: ${f.destino||''}
+Distancia: ${(m.distanceM/1000).toFixed(2)} km
+Duración: ${fmtDurationText(m.durationMs)}
+Paradas: ${m.stops}
+Tiempo detenido: ${fmtDurationText(m.stopMs)}
+Lugares: ${lugares || 'Sin referencia'}
+Fecha: ${localStamp(trip.startedAt||trip.createdAt)}
+GPS: ${m.gpsQuality}`;
     const url = 'https://wa.me/?text=' + encodeURIComponent(txt);
     window.open(url, '_blank');
   }
@@ -719,7 +951,8 @@
     el.btnStart.addEventListener('click', startTrip); el.btnStop.addEventListener('click', stopTrip); el.btnStopBar.addEventListener('click', stopTrip);
     el.btnRestartGps.addEventListener('click', ()=>{ if(!state.activeTrip){ toast('No hay recorrido activo para reiniciar GPS.'); return; } startWatch(true); toast('GPS reiniciado.'); });
     el.btnSaveCheckpoint.addEventListener('click', addCheckpoint);
-    el.btnLocate.addEventListener('click', locateOnce); el.btnFitRoute.addEventListener('click', fitRoute); el.btnToggleLots.addEventListener('click', toggleLots);
+    el.btnMarkPlace.addEventListener('click', markOperationalPlace);
+    el.btnLocate.addEventListener('click', activateLocation); el.btnFitRoute.addEventListener('click', fitRoute); el.btnToggleLots.addEventListener('click', toggleLots);
     el.btnToggleNorth.addEventListener('click', ()=>{ el.compassBox.classList.toggle('hidden'); });
     el.btnExcel.addEventListener('click', ()=>exportExcel()); el.btnReport.addEventListener('click', ()=>exportReport()); el.btnWhatsapp.addEventListener('click', ()=>shareWhatsapp()); el.btnCard.addEventListener('click', ()=>makeSummaryCard());
     el.btnClearHistory.addEventListener('click', ()=>{ if(confirm('¿Borrar historial local de recorridos finalizados? Esta acción no borra archivos Excel ya descargados.')){ state.history=[]; saveHistory(); renderHistory(); toast('Historial local borrado.'); } });
@@ -739,11 +972,14 @@
     window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); state.deferredInstall=e; el.btnInstall.classList.remove('hidden'); });
     el.btnInstall.addEventListener('click', async()=>{ if(state.deferredInstall){ state.deferredInstall.prompt(); await state.deferredInstall.userChoice; state.deferredInstall=null; el.btnInstall.classList.add('hidden'); } });
   }
-  function locateOnce(){
+  function activateLocation(){
     if(!navigator.geolocation){ toast('GPS no disponible.'); return; }
+    startWatch(true);
+    toast('Ubicación activada. La app mostrará su posición; no registra recorrido hasta tocar Iniciar.');
     navigator.geolocation.getCurrentPosition((pos)=>{
-      const p={lat:pos.coords.latitude,lng:pos.coords.longitude}; state.map.setView([p.lat,p.lng],17);
-      const lot=locateLot(p); el.contextBox.textContent = lot ? `Ubicación actual: ${lot.finca} · Lote ${lot.lote}.` : 'Ubicación actual sin lote/finca asociado.';
+      const raw = { timestamp:pos.timestamp ? new Date(pos.timestamp).toISOString() : nowIso(), lat:Number(pos.coords.latitude), lng:Number(pos.coords.longitude), accuracy:Number(pos.coords.accuracy||9999), headingRaw:Number.isFinite(pos.coords.heading)?Number(pos.coords.heading):0 };
+      updateLivePosition(raw);
+      if(state.map) state.map.setView([raw.lat,raw.lng],17);
     }, handleGeoError, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
   }
   function handleVisibility(){
@@ -766,7 +1002,7 @@
   function tick(){ updateMetrics(state.activeTrip || latestTrip()); }
   function registerServiceWorker(){
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('service-worker.js?v=2.0.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
+      navigator.serviceWorker.register('service-worker.js?v=3.0.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
     }
   }
   function escapeHtml(v){ return String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
@@ -779,7 +1015,7 @@
     el.bootMsg.classList.add('hidden');
     state.timer = setInterval(tick, 1000);
     setBadge(el.saveBadge, 'Autosave listo', 'ok');
-    toast('CASUR Transportes GPS V2 robusta lista.');
+    toast('CASUR Transportes GPS V3 operativa lista.');
   }
 
   init().catch(err=>{
