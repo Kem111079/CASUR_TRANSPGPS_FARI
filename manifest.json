@@ -1,8 +1,8 @@
 {
-  "name": "CASUR Transportes GPS",
-  "short_name": "GPS CASUR",
-  "description": "Registro, seguimiento y control de transporte CASUR con GPS, finca/lote/referencia actual visible por modo, multirecorrido, PDF, Excel ejecutivo y WhatsApp.",
-  "start_url": "./index.html?v=5.4.0",
+  "name": "CASUR Transportes GPS · Roles claros",
+  "short_name": "CASUR GPS",
+  "description": "PWA CASUR para recorridos de transporte con modo Conductor, modo Supervisor y simulador de presentación.",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
@@ -60,5 +60,6 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "casur-transportes-gps-v5-6-roles-claros"
 }

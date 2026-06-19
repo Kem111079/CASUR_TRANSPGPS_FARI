@@ -221,3 +221,106 @@ body.panel-open .leaflet-control-zoom:hover{opacity:.65!important;}
   .location-line small{font-size:11px;}
   .panel.collapsed .location-line{display:grid!important;}
 }
+
+/* ================== V5.5 · Simulador de presentación ================== */
+.demo-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:10px 16px;
+  background:linear-gradient(135deg,#FFF7D9,#FFFFFF);
+  border-bottom:1px solid #EAD98A;
+  color:#123C2C;
+  box-shadow:0 6px 20px rgba(16,37,27,.08);
+  position:relative;
+  z-index:80;
+}
+.demo-bar.hidden{display:none!important;}
+.demo-bar b{display:block;font-size:14px;color:#123C2C;}
+.demo-bar span{display:block;font-size:12px;color:#5E5A38;font-weight:800;line-height:1.25;}
+.demo-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+.demo-actions button{border:0;border-radius:12px;padding:10px 12px;font-weight:950;background:#123C2C;color:#fff;box-shadow:0 5px 14px rgba(16,37,27,.16);}
+.demo-actions button:nth-child(2){background:#1F6B46;}
+.demo-actions button:nth-child(3){background:#A32018;}
+.demo-actions button:nth-child(4){background:#F4E8B4;color:#123C2C;}
+body.demo-mode .topbar{box-shadow:none;}
+body.demo-mode #gpsBadge{background:#FFF8E3;color:#7A5600;border-color:#E9C85C;}
+@media (max-width:620px){
+  .demo-bar{display:grid;grid-template-columns:1fr;padding:9px 12px;gap:8px;}
+  .demo-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .demo-actions button{font-size:12.5px;padding:9px 7px;}
+}
+@media (min-width:900px){
+  body.demo-mode .layout{height:calc(100svh - 78px - 58px)!important;}
+  body.demo-mode .map-wrap{height:calc(100svh - 78px - 58px)!important;}
+  body.demo-mode .panel{height:calc(100svh - 78px - 58px)!important;max-height:calc(100svh - 78px - 58px)!important;}
+}
+
+/* ================== V5.6 · Roles claros Conductor / Supervisor ================== */
+.role-top-chip{
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.38);
+  color:#fff;border-radius:999px;padding:8px 11px;font-size:12px;font-weight:950;
+}
+.role-banner{
+  display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center;
+  border-radius:18px;padding:11px 12px;margin:2px 0 10px;border:1px solid #D7E6DC;
+  background:linear-gradient(135deg,#F8FCF9,#FFFFFF);box-shadow:0 6px 18px rgba(16,37,27,.06);
+}
+.role-banner .role-symbol{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;font-size:23px;background:#EAF5EE;color:#123C2C;}
+.role-banner b{display:block;font-size:16px;color:#123C2C;line-height:1.1;}
+.role-banner span{display:block;color:#62756A;font-size:12.5px;font-weight:850;line-height:1.25;margin-top:2px;}
+.mode-driver .role-banner{border-left:5px solid #1F6B46;}
+.mode-supervisor .role-banner{border-left:5px solid #F2B705;background:linear-gradient(135deg,#FFF8E3,#FFFFFF);}
+.mode-supervisor .role-banner .role-symbol{background:#123C2C;color:#F2B705;}
+.driver-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 9px;}
+.driver-steps span{background:#EAF5EE;color:#123C2C;border:1px solid #D6E6DC;border-radius:12px;padding:8px 6px;text-align:center;font-size:11px;font-weight:950;line-height:1.15;}
+.supervisor-dashboard{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 10px;}
+.supervisor-dashboard article{background:#123C2C;color:#fff;border-radius:16px;padding:10px 11px;box-shadow:0 7px 18px rgba(18,60,44,.14);min-height:66px;}
+.supervisor-dashboard article:nth-child(2){background:#7A5600;}
+.supervisor-dashboard article:nth-child(3){background:#1F6B46;}
+.supervisor-dashboard article:nth-child(4){background:#F8F4E2;color:#123C2C;border:1px solid #E8D98F;}
+.supervisor-dashboard span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:950;opacity:.85;margin-bottom:5px;}
+.supervisor-dashboard b{display:block;font-size:18px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.supervisor-help{margin:0 0 10px;color:#51635A;font-weight:800;font-size:12.5px;line-height:1.35;background:#F8FBF9;border:1px dashed #CFE0D5;border-radius:14px;padding:9px 10px;}
+.mode-driver .supervisor-only{display:none!important;}
+.mode-supervisor .driver-only{display:none!important;}
+.mode-supervisor.trip-active .main-actions.driver-only{display:grid!important;}
+.mode-supervisor.trip-active .main-actions.driver-only #btnMarkPlace,
+.mode-supervisor.trip-active .main-actions.driver-only #btnSaveCheckpoint{display:none!important;}
+.mode-supervisor .driver-guide{display:none!important;}
+.mode-supervisor #tripDataBlock{display:none!important;}
+.mode-supervisor #exportBlock{display:none!important;}
+.mode-supervisor .panel:not(.collapsed) #historyBlock,
+.mode-supervisor .panel:not(.collapsed) #advancedBlock{display:block!important;}
+.mode-driver #historyBlock,.mode-driver #advancedBlock,.mode-driver #supervisorDashboard{display:none!important;}
+.mode-driver #driverSteps{display:grid!important;}
+.mode-supervisor #driverSteps{display:none!important;}
+.mode-supervisor .status-grid.compact-metrics{margin-top:4px;}
+.mode-supervisor .location-line .location-kicker::after{content:' · Detalle técnico';font-weight:900;color:#8A5B00;}
+.mode-driver .location-line small{display:none;}
+.mode-supervisor .location-line small{display:block!important;}
+.mode-driver .panel.collapsed .role-banner{display:none;}
+.mode-supervisor .panel.collapsed .role-banner{display:grid;}
+.mode-supervisor .panel.collapsed .supervisor-dashboard{display:grid!important;}
+.mode-supervisor .panel.collapsed .status-grid{display:none;}
+.mode-supervisor .panel.collapsed .location-line{display:none!important;}
+@media (max-width:520px){
+  .role-top-chip{display:none;}
+  .role-banner{grid-template-columns:38px 1fr;padding:9px 10px;margin:1px 0 8px;border-radius:16px;}
+  .role-banner .role-symbol{width:38px;height:38px;border-radius:13px;font-size:20px;}
+  .role-banner b{font-size:15px;}.role-banner span{font-size:11.5px;}
+  .driver-steps{grid-template-columns:1fr 1fr;gap:6px;}
+  .driver-steps span{font-size:10.5px;padding:7px 5px;}
+  .supervisor-dashboard{grid-template-columns:1fr 1fr;gap:7px;}
+  .supervisor-dashboard article{padding:8px 9px;min-height:58px;border-radius:14px;}
+  .supervisor-dashboard b{font-size:15px;}
+  .mode-supervisor .panel.collapsed{max-height:238px!important;}
+  .mode-driver .panel:not(.collapsed){max-height:88svh!important;}
+}
+@media (min-width:900px){
+  .role-top-chip{font-size:13px;padding:9px 13px;}
+  .supervisor-dashboard{grid-template-columns:1fr 1fr;}
+  .mode-supervisor .panel.collapsed .supervisor-dashboard{display:grid!important;}
+}

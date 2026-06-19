@@ -87,3 +87,29 @@ El GPS con la pantalla apagada o con la app totalmente en segundo plano no está
 - En Modo Supervisor se muestra más detalle: tipo de referencia, distancia aproximada, fuente y precisión GPS.
 - La referencia se mantiene visible aun cuando la bitácora está compacta, sin volver a mostrar badges técnicos de autosalvado o conteo de lotes.
 - Se conserva la regla: lote/finca dentro del shape → cerca de lote/finca → referencia operativa → sin referencia.
+
+## Checklist rápido · Simulador de presentación V5.5
+
+- [ ] Publicar ZIP descomprimido en GitHub Pages.
+- [ ] Abrir `simulador.html`.
+- [ ] Confirmar que aparece la barra **Modo simulador para presentación**.
+- [ ] Presionar **Demo guiada**.
+- [ ] Ver que el mapa dibuja la trayectoria con flechas.
+- [ ] Confirmar que aparecen referencias como San Lucas/lote o carretera.
+- [ ] Confirmar que se detectan paradas.
+- [ ] Presionar **Generar demo** para crear el recorrido completo rápido.
+- [ ] Probar descarga de Excel.
+- [ ] Probar PDF del recorrido.
+- [ ] Cambiar a Modo Supervisor y revisar historial.
+- [ ] Usar **Limpiar demo** si se quiere repetir la demostración.
+
+## 10. Roles claros V5.6
+
+- [ ] En Modo Conductor se ve banner “Modo Conductor · Registrar recorrido”.
+- [ ] En Modo Conductor se muestran datos del viaje, Activar GPS, Iniciar/Finalizar, Marcar lugar y descargas.
+- [ ] En Modo Conductor NO se ve historial ni opciones avanzadas.
+- [ ] En Modo Supervisor se ve banner “Modo Supervisor · Revisión y control”.
+- [ ] En Modo Supervisor se ve panel rápido con recorridos, pendientes, km total y último folio.
+- [ ] En Modo Supervisor se ve historial y opciones avanzadas.
+- [ ] En Modo Supervisor NO se ve el formulario de captura del conductor.
+- [ ] Si hay recorrido activo, se conserva la posibilidad de finalizar aunque se cambie de modo.

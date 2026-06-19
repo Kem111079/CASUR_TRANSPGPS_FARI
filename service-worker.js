@@ -1,8 +1,8 @@
-const CACHE_NAME = 'casur-transportes-gps-v5-4-referencia-actual-20260619-01';
+const CACHE_NAME = 'casur-transportes-gps-v5-6-roles-claros-20260619-01';
 const APP_SHELL = [
-  './', './index.html', './styles.css?v=5.4.0', './app.js?v=5.4.0', './manifest.json', './offline.html',
+  './', './index.html', './simulador.html', './styles.css?v=5.6.0', './app.js?v=5.6.0', './manifest.json', './offline.html',
   './assets/logo_casur.png',
-  './data/poligonos_casur.geojson?v=5.4.0', './data/metadata.json', './data/referencias_operativas.json?v=5.4.0', './data/maestro_fincas.json',
+  './data/poligonos_casur.geojson?v=5.6.0', './data/metadata.json', './data/referencias_operativas.json?v=5.6.0', './data/maestro_fincas.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/favicon.png'
 ];
 
@@ -33,6 +33,7 @@ function isExternalCached(url){
 function isAppShellFile(url){
   return url.pathname.endsWith('/') ||
          url.pathname.endsWith('/index.html') ||
+         url.pathname.endsWith('/simulador.html') ||
          url.pathname.endsWith('/app.js') ||
          url.pathname.endsWith('/styles.css') ||
          url.pathname.endsWith('/manifest.json') ||
@@ -47,8 +48,8 @@ self.addEventListener('fetch', (event) => {
   if(req.mode === 'navigate'){
     event.respondWith(
       fetch(req, { cache:'no-store' })
-        .then(res => { const copy = res.clone(); caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy)).catch(()=>{}); return res; })
-        .catch(() => caches.match('./index.html').then(cached => cached || caches.match('./offline.html')))
+        .then(res => { const copy = res.clone(); caches.open(CACHE_NAME).then(cache => cache.put(req, copy)).catch(()=>{}); return res; })
+        .catch(() => caches.match(req).then(cached => cached || caches.match('./index.html').then(c => c || caches.match('./offline.html'))))
     );
     return;
   }
@@ -60,7 +61,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para evitar que el usuario vea pantallas viejas, los archivos de la app usan network-first.
   if(isAppShellFile(url)){
     event.respondWith(
       fetch(req, { cache:'no-store' })

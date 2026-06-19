@@ -69,3 +69,52 @@ No hay rastreo oculto. El usuario debe activar GPS e iniciar manualmente el reco
 - En Modo Supervisor se muestra más detalle: tipo de referencia, distancia aproximada, fuente y precisión GPS.
 - La referencia se mantiene visible aun cuando la bitácora está compacta, sin volver a mostrar badges técnicos de autosalvado o conteo de lotes.
 - Se conserva la regla: lote/finca dentro del shape → cerca de lote/finca → referencia operativa → sin referencia.
+
+## V5.5 · Simulador de presentación
+
+Esta versión incluye un modo demo para presentar el proyecto sin depender del GPS real del teléfono.
+
+### Cómo abrir el simulador
+
+Después de publicar en GitHub Pages, abra:
+
+`simulador.html`
+
+o directamente:
+
+`index.html?demo=1`
+
+### Qué permite mostrar
+
+- Activación simulada de GPS.
+- Recorrido demo sobre el mapa.
+- Trayectoria con flechas de rumbo.
+- Referencia actual por finca/lote y carretera.
+- Paradas detectadas.
+- Historial local del recorrido demo.
+- Exportación Excel.
+- PDF del recorrido.
+- Compartir por WhatsApp cuando el teléfono lo permite.
+
+### Botones del simulador
+
+- **Demo guiada:** anima el recorrido punto por punto para explicar el flujo en vivo.
+- **Generar demo:** crea el recorrido completo de inmediato para mostrar reportes.
+- **Finalizar demo:** cierra el recorrido demo en curso.
+- **Limpiar demo:** borra recorridos demo del historial local.
+
+> Nota: el simulador no representa GPS real. Es únicamente para demostración ejecutiva y capacitación.
+
+## V5.6 · Roles claros Conductor / Supervisor
+
+Esta versión separa mejor la experiencia de uso:
+
+### Modo Conductor
+
+Enfocado en captura de recorrido. Muestra datos del viaje, activar GPS, iniciar/detener, ubicación actual, métricas y descargas del recorrido actual. Oculta historial, opciones avanzadas, capas y datos técnicos.
+
+### Modo Supervisor
+
+Enfocado en revisión y control. Muestra panel rápido de recorridos, pendientes locales, kilómetros acumulados, último folio, historial, exportación consolidada y opciones avanzadas. Oculta el formulario de captura para que la pantalla no se confunda con la operación del conductor.
+
+La separación es visual/operativa dentro de la PWA. La seguridad real por usuario, permisos y administrador central queda para la fase con backend/app híbrida.

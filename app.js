@@ -1,10 +1,11 @@
-/* CASUR Transportes GPS V5.4 Referencia Actual
+/* CASUR Transportes GPS V5.6 Roles Claros
    PWA de campo para recorridos, lotes/fincas, paradas y exportación operativa.
    Sin backend. Rastreo manual, visible y controlado por el usuario. */
 (function(){
   'use strict';
 
-  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '5.4.0-referencia-actual';
+  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '5.6.0-roles-claros';
+  const DEMO_MODE = new URLSearchParams(window.location.search).get('demo') === '1' || /(^|#)demo(=1)?/i.test(window.location.hash || '');
   const STORAGE_ACTIVE = 'casur_transportes_active_trip_v4';
   const STORAGE_HISTORY = 'casur_transportes_history_v4';
   const STORAGE_CFG = 'casur_transportes_cfg_v4';
@@ -23,7 +24,7 @@
   const $ = (id) => document.getElementById(id);
   const el = {
     bootMsg: $('bootMsg'), appShell: $('appShell'), mapWrap: $('mapWrap'), map: $('map'), gpsBadge: $('gpsBadge'), refBadge: $('refBadge'), shapeBadge: $('shapeBadge'), saveBadge: $('saveBadge'),
-    btnInstall: $('btnInstall'), btnMode: $('btnMode'), btnLocate: $('btnLocate'), btnFitRoute: $('btnFitRoute'), btnToggleNorth: $('btnToggleNorth'), btnToggleLots: $('btnToggleLots'), compassBox: $('compassBox'),
+    btnInstall: $('btnInstall'), btnMode: $('btnMode'), roleTopChip: $('roleTopChip'), panelEyebrow: $('panelEyebrow'), panelTitle: $('panelTitle'), roleBanner: $('roleBanner'), roleSymbol: $('roleSymbol'), roleTitle: $('roleTitle'), roleSubtitle: $('roleSubtitle'), supTripCount: $('supTripCount'), supPendingCount: $('supPendingCount'), supKmTotal: $('supKmTotal'), supLastFolio: $('supLastFolio'), btnLocate: $('btnLocate'), btnFitRoute: $('btnFitRoute'), btnToggleNorth: $('btnToggleNorth'), btnToggleLots: $('btnToggleLots'), compassBox: $('compassBox'),
     panel: $('controlPanel'), btnCollapse: $('btnCollapse'), panelGrip: $('panelGrip'),
     mDistance: $('mDistance'), mDuration: $('mDuration'), mSpeed: $('mSpeed'), mStops: $('mStops'),
     driver: $('driver'), plate: $('plate'), equipment: $('equipment'), tripType: $('tripType'), origin: $('origin'), destination: $('destination'), initialNote: $('initialNote'),
@@ -33,7 +34,8 @@
     btnExcel: $('btnExcel'), btnReport: $('btnReport'), btnWhatsapp: $('btnWhatsapp'), btnCard: $('btnCard'), btnPdf: $('btnPdf'), btnShare: $('btnShare'),
     historyList: $('historyList'), btnClearHistory: $('btnClearHistory'), btnNewTrip: $('btnNewTrip'), btnExportAll: $('btnExportAll'),
     exportBlock: $('exportBlock'), historyBlock: $('historyBlock'), advancedBlock: $('advancedBlock'), tripDataBlock: $('tripDataBlock'), summaryBlock: $('summaryBlock'), driverGuide: $('driverGuide'),
-    activeBar: $('activeBar'), activeBarText: $('activeBarText'), btnStopBar: $('btnStopBar'), toast: $('toast')
+    activeBar: $('activeBar'), activeBarText: $('activeBarText'), btnStopBar: $('btnStopBar'), toast: $('toast'),
+    demoBar: $('demoBar'), btnDemoGuided: $('btnDemoGuided'), btnDemoInstant: $('btnDemoInstant'), btnDemoFinish: $('btnDemoFinish'), btnDemoClear: $('btnDemoClear'), demoStatus: $('demoStatus')
   };
 
   const state = {
@@ -62,7 +64,12 @@
     logoDataUrl:null,
     wakeLock:null,
     wakeLockWanted:false,
-    followMode:true
+    followMode:true,
+    demoMode: DEMO_MODE,
+    demoTimer:null,
+    demoRunning:false,
+    demoIndex:0,
+    demoPoints:[]
   };
 
   const defaultCfg = {
@@ -396,7 +403,7 @@
   }
   async function loadLots(){
     try{
-      const res = await fetch('data/poligonos_casur.geojson?v=5.2.0', { cache:'no-store' });
+      const res = await fetch('data/poligonos_casur.geojson?v=5.6.0', { cache:'no-store' });
       if(!res.ok) throw new Error('GeoJSON no disponible');
       state.lotsGeojson = await res.json();
       state.lotFeatures = (state.lotsGeojson.features || []).filter(f => f.geometry && ['Polygon','MultiPolygon'].includes(f.geometry.type));
@@ -420,7 +427,7 @@
     const local = loadLocalReferences();
     let defaults = [];
     try{
-      const res = await fetch('data/referencias_operativas.json?v=5.2.0', { cache:'no-store' });
+      const res = await fetch('data/referencias_operativas.json?v=5.6.0', { cache:'no-store' });
       if(res.ok){ const json = await res.json(); defaults = Array.isArray(json) ? json : (json.referencias || []); }
     }catch(e){ console.warn('Referencias operativas no cargadas', e); }
     const all = [];
@@ -879,10 +886,21 @@
     catch(e){ state.history = []; }
     renderHistory();
   }
-  function saveHistory(){ localStorage.setItem(STORAGE_HISTORY, JSON.stringify(state.history.slice(0,MAX_HISTORY))); }
+  function saveHistory(){ localStorage.setItem(STORAGE_HISTORY, JSON.stringify(state.history.slice(0,MAX_HISTORY))); updateSupervisorDashboard(); }
   function latestTrip(){ return state.history && state.history[0] || null; }
+  function updateSupervisorDashboard(){
+    const list = state.history || [];
+    const count = list.length;
+    const pending = list.filter(t => !(t.synced || t.syncStatus === 'sincronizado')).length;
+    const totalM = list.reduce((acc,t)=> acc + Number((t.metrics || computeMetrics(t)).distanceM || 0), 0);
+    const last = list[0];
+    if(el.supTripCount) el.supTripCount.textContent = String(count);
+    if(el.supPendingCount) el.supPendingCount.textContent = String(pending);
+    if(el.supKmTotal) el.supKmTotal.textContent = (totalM/1000).toFixed(2);
+    if(el.supLastFolio) el.supLastFolio.textContent = last && last.folio ? last.folio : '—';
+  }
   function renderHistory(){
-    if(!state.history.length){ el.historyList.textContent = 'Sin recorridos guardados.'; return; }
+    if(!state.history.length){ el.historyList.textContent = 'Sin recorridos guardados.'; updateSupervisorDashboard(); return; }
     el.historyList.innerHTML = state.history.slice(0,25).map((t,idx)=>{
       const m = t.metrics || computeMetrics(t);
       const f = t.fields || {};
@@ -893,8 +911,11 @@
       return `<div class="history-item"><b>${name}</b> ${folio}<br>${escapeHtml(f.origen || 'Origen no declarado')} → ${escapeHtml(f.destino || 'Destino no declarado')}<br>${localStamp(t.startedAt || t.createdAt)} · ${fmtKm(m.distanceM)} · ${fmtDurationText(m.durationMs)} · ${m.stops} paradas<br>${chip}
         <div class="history-actions"><button data-act="view" data-idx="${idx}">Ver ruta</button><button data-act="pdf" data-idx="${idx}">PDF</button><button data-act="excel" data-idx="${idx}">Excel</button><button data-act="wa" data-idx="${idx}">Compartir</button><button data-act="report" data-idx="${idx}">Imprimir</button><button class="danger-mini" data-act="delete" data-idx="${idx}">Borrar</button></div></div>`;
     }).join('');
+    updateSupervisorDashboard();
   }
   function setActiveUi(active){
+    document.body.classList.toggle('trip-active', !!active);
+    document.body.classList.toggle('trip-inactive', !active);
     if(el.btnStart) el.btnStart.classList.toggle('hidden', active);
     if(el.btnStop) el.btnStop.classList.toggle('hidden', !active);
     if(el.activeBar) el.activeBar.classList.toggle('hidden', !active);
@@ -1409,6 +1430,174 @@ GPS: ${m.gpsQuality}`;
   }
 
 
+  // -------------------- Simulador de presentación --------------------
+  function isDemoMode(){ return !!state.demoMode; }
+  function demoSetStatus(msg){ if(el.demoStatus) el.demoStatus.textContent = msg || ''; }
+  function setupDemoUi(){
+    if(!isDemoMode()) return;
+    document.body.classList.add('demo-mode');
+    if(el.demoBar) el.demoBar.classList.remove('hidden');
+    demoSetStatus('Simulador listo. No usa GPS real. Sirve para presentar flujo, ruta, paradas, Excel y PDF.');
+    setBadge(el.gpsBadge, 'SIMULADOR · GPS ficticio', 'warn');
+    toast('Modo simulador activo: permite demostrar el recorrido sin moverse ni usar GPS real.', 7000);
+    demoSeedFields(false);
+  }
+  function demoSeedFields(overwrite){
+    const set = (node, value) => { if(node && (overwrite || !clean(node.value))) node.value = value; };
+    set(el.driver, 'Transportista demo');
+    set(el.plate, 'M-1024');
+    set(el.equipment, 'CAM-24');
+    if(el.tripType && (overwrite || !el.tripType.value)) el.tripType.value = 'Caña';
+    set(el.origin, 'Finca San Lucas');
+    set(el.destination, 'Patio / Báscula CASUR');
+    set(el.initialNote, 'Simulación para presentación: recorrido de caña con parada operativa y tramo en carretera.');
+  }
+  function ensureDemoReferences(){
+    const demoRefs = [
+      {id:'DEMO-REF-ENTRADA-SAN-LUCAS', nombre:'Entrada San Lucas', tipo:'entrada de finca', lat:11.49405, lng:-85.83615, observacion:'Referencia demo para acceso a finca', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-CARRETERA', nombre:'Carretera Nandaime-CASUR', tipo:'carretera', lat:11.49840, lng:-85.82990, observacion:'Tramo demo fuera de lote/shape', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-BASCULA', nombre:'Báscula / Patio CASUR', tipo:'báscula', lat:11.50310, lng:-85.82360, observacion:'Destino operativo demo', createdAt:nowIso(), source:'demo presentación', manual:true}
+    ];
+    const ids = new Set((state.references || []).map(r => r.id));
+    demoRefs.forEach(r => { if(!ids.has(r.id)) state.references.push(r); });
+    drawReferences();
+  }
+  function demoRoutePoints(){
+    // Ruta cercana a San Lucas 2009/2010 + tramo fuera de shape para demostrar referencias operativas.
+    const start = Date.now() - 74*60000;
+    const rows = [
+      [0,  11.49396, -85.83582, 0,  14],
+      [2,  11.49415, -85.83545, 8,  12],
+      [5,  11.49439, -85.83498, 13, 11],
+      [8,  11.49467, -85.83453, 16, 10],
+      [11, 11.49492, -85.83413, 12, 10],
+      // Parada de carga/espera cerca de San Lucas 2009
+      [13, 11.49496, -85.83403, 0,  9],
+      [16, 11.49497, -85.83402, 0,  9],
+      [20, 11.49496, -85.83401, 0,  9],
+      [24, 11.49497, -85.83402, 0,  9],
+      [28, 11.49520, -85.83366, 10, 11],
+      [31, 11.49558, -85.83310, 18, 13],
+      [34, 11.49604, -85.83255, 22, 16],
+      [38, 11.49660, -85.83183, 26, 17],
+      [42, 11.49722, -85.83112, 28, 16],
+      [46, 11.49784, -85.83044, 30, 17],
+      // Tramo en carretera: debe buscar referencia operativa, no lote.
+      [50, 11.49835, -85.82986, 24, 18],
+      [54, 11.49888, -85.82918, 25, 18],
+      [58, 11.49934, -85.82840, 27, 18],
+      // Parada corta/operativa en carretera
+      [60, 11.49942, -85.82818, 0,  16],
+      [64, 11.49943, -85.82818, 0,  16],
+      [67, 11.49943, -85.82817, 0,  16],
+      [69, 11.49986, -85.82750, 24, 17],
+      [71, 11.50072, -85.82620, 28, 18],
+      [73, 11.50165, -85.82486, 31, 18],
+      [74, 11.50242, -85.82395, 18, 19],
+      [75, 11.50310, -85.82360, 4,  18],
+      [76, 11.50310, -85.82360, 0,  18]
+    ];
+    return rows.map((r,i) => {
+      const prev = i ? rows[i-1] : null;
+      let heading = 0;
+      if(prev){ heading = bearing({lat:prev[1],lng:prev[2]}, {lat:r[1],lng:r[2]}) || 0; }
+      return { timestamp:new Date(start + r[0]*60000).toISOString(), lat:r[1], lng:r[2], speedKmh:r[3], accuracy:r[4], headingRaw:heading };
+    });
+  }
+  function demoAsGeoPosition(p){
+    return { timestamp:new Date(p.timestamp).getTime(), coords:{ latitude:p.lat, longitude:p.lng, accuracy:p.accuracy, speed:(p.speedKmh||0)/3.6, heading:p.headingRaw } };
+  }
+  function startDemoTrip(mode){
+    if(!isDemoMode()){ toast('Abra simulador.html o agregue ?demo=1 al enlace para usar el simulador.'); return; }
+    if(state.activeTrip && !state.activeTrip.demo){
+      toast('Hay un recorrido real activo. Finalícelo antes de correr el simulador.');
+      expandPanel();
+      return;
+    }
+    clearDemoTimer();
+    stopWatch(false);
+    demoSeedFields(true);
+    ensureDemoReferences();
+    state.activeTrip = buildTrip();
+    state.activeTrip.demo = true;
+    state.activeTrip.demoMode = mode || 'guiado';
+    state.activeTrip.status = 'active';
+    state.routeFitDone = false;
+    state.followMode = true;
+    state.demoPoints = demoRoutePoints();
+    state.demoIndex = 0;
+    state.demoRunning = true;
+    state.routeLayer && state.routeLayer.clearLayers();
+    state.arrowLayer && state.arrowLayer.clearLayers();
+    state.markerLayer && state.markerLayer.clearLayers();
+    setActiveUi(true);
+    expandPanel();
+    setBadge(el.gpsBadge, 'SIMULADOR · grabando', 'warn');
+    addEvent('DEMO_INICIADO', mode === 'instant' ? 'Recorrido demo generado de forma instantánea.' : 'Recorrido demo guiado iniciado para presentación.');
+    saveActiveTrip('Demo iniciado');
+    demoSetStatus(mode === 'instant' ? 'Generando recorrido demo completo…' : 'Demo guiada en ejecución: se simulan puntos GPS, paradas, finca/lote y carretera.');
+    if(mode === 'instant'){
+      state.demoPoints.forEach(p => handlePosition(demoAsGeoPosition(p)));
+      finishDemoTrip(true);
+      return;
+    }
+    feedNextDemoPoint();
+    state.demoTimer = setInterval(feedNextDemoPoint, 900);
+  }
+  function feedNextDemoPoint(){
+    if(!state.activeTrip || !state.demoRunning){ clearDemoTimer(); return; }
+    const p = state.demoPoints[state.demoIndex++];
+    if(!p){ finishDemoTrip(true); return; }
+    handlePosition(demoAsGeoPosition(p));
+    const pct = Math.min(100, Math.round((state.demoIndex / state.demoPoints.length) * 100));
+    const last = state.activeTrip && state.activeTrip.points && state.activeTrip.points[state.activeTrip.points.length-1];
+    const lugar = last ? (last.referencia || contextText(last) || 'Sin referencia') : 'esperando punto';
+    demoSetStatus(`Demo guiada ${pct}% · ${lugar}`);
+  }
+  function clearDemoTimer(){ if(state.demoTimer){ clearInterval(state.demoTimer); state.demoTimer = null; } state.demoRunning = false; }
+  function finishDemoTrip(auto){
+    clearDemoTimer();
+    const trip = state.activeTrip;
+    if(!trip){ demoSetStatus('No hay recorrido demo activo.'); return; }
+    const last = trip.points && trip.points[trip.points.length-1];
+    closeStopCandidate(trip, last ? last.timestamp : nowIso(), true);
+    trip.fields = trip.fields || {};
+    if(!trip.fields.observacionFinal) trip.fields.observacionFinal = 'Recorrido demo de presentación. No corresponde a GPS real.';
+    trip.endedAt = last ? last.timestamp : nowIso();
+    trip.status = 'finished';
+    trip.syncStatus = 'local_pendiente';
+    trip.synced = false;
+    trip.deviceId = trip.deviceId || getDeviceId();
+    if(last) trip.endContext = { finca:last.finca, lote:last.lote, zona:last.zona, referencia:last.referencia, tipoReferencia:last.tipoReferencia, lat:last.lat, lng:last.lng };
+    addEvent('DEMO_FINALIZADO', auto ? 'El simulador finalizó automáticamente.' : 'El usuario finalizó el demo manualmente.');
+    trip.metrics = computeMetrics(trip);
+    trip.hashLocal = simpleHash(JSON.stringify({ folio:trip.folio, id:trip.id, deviceId:trip.deviceId, startedAt:trip.startedAt, endedAt:trip.endedAt, points:(trip.points||[]).length, distanceM:trip.metrics.distanceM, demo:true }));
+    state.history.unshift(stripRuntime(trip));
+    state.history = state.history.slice(0, MAX_HISTORY);
+    saveHistory();
+    localStorage.removeItem(STORAGE_ACTIVE);
+    state.activeTrip = null;
+    setActiveUi(false);
+    if(el.exportBlock) el.exportBlock.open = true;
+    drawTrip(trip, { fit:true });
+    updateMetrics(trip);
+    renderHistory();
+    setBadge(el.gpsBadge, 'SIMULADOR · recorrido generado', 'ok');
+    demoSetStatus('Demo finalizada. Ya puede mostrar ruta, resumen, historial, Excel, PDF y WhatsApp.');
+    toast('Demo finalizada: recorrido guardado en historial local. Puede descargar Excel/PDF para presentarlo.', 6500);
+  }
+  function resetDemoData(){
+    if(state.activeTrip && !state.activeTrip.demo){ toast('Hay un recorrido real activo. No se limpió.'); return; }
+    clearDemoTimer();
+    if(state.activeTrip && state.activeTrip.demo){ state.activeTrip = null; localStorage.removeItem(STORAGE_ACTIVE); }
+    state.history = (state.history || []).filter(t => !t.demo);
+    saveHistory(); renderHistory(); prepareNewTrip();
+    setBadge(el.gpsBadge, 'SIMULADOR · GPS ficticio', 'warn');
+    demoSetStatus('Datos demo limpiados. Listo para correr otra demostración.');
+    toast('Se limpiaron los recorridos demo.');
+  }
+
+
   // -------------------- Modo visual --------------------
   function setMode(mode){
     mode = mode === 'supervisor' ? 'supervisor' : 'driver';
@@ -1417,9 +1606,21 @@ GPS: ${m.gpsQuality}`;
     document.body.classList.toggle('mode-supervisor', mode === 'supervisor');
     document.body.classList.toggle('mode-driver', mode !== 'supervisor');
     document.body.dataset.mode = mode;
-    if(el.btnMode) el.btnMode.textContent = mode === 'supervisor' ? '👷 Modo Conductor' : '🛡️ Modo Supervisor';
+    if(el.btnMode) el.btnMode.textContent = mode === 'supervisor' ? '🚛 Cambiar a Conductor' : '🛡️ Cambiar a Supervisor';
+    if(el.roleTopChip) el.roleTopChip.textContent = mode === 'supervisor' ? '🛡️ Supervisor' : '🚛 Conductor';
+    if(el.panelEyebrow) el.panelEyebrow.textContent = mode === 'supervisor' ? 'Modo Supervisor' : 'Modo Conductor';
+    if(el.panelTitle) el.panelTitle.textContent = mode === 'supervisor' ? 'Revisión y control' : 'Registrar recorrido';
+    if(el.roleBanner){
+      el.roleBanner.classList.toggle('role-supervisor', mode === 'supervisor');
+      el.roleBanner.classList.toggle('role-driver', mode !== 'supervisor');
+    }
+    if(el.roleSymbol) el.roleSymbol.textContent = mode === 'supervisor' ? '🛡️' : '🚛';
+    if(el.roleTitle) el.roleTitle.textContent = mode === 'supervisor' ? 'Modo Supervisor' : 'Modo Conductor';
+    if(el.roleSubtitle) el.roleSubtitle.textContent = mode === 'supervisor'
+      ? 'Revisar historial, rutas, folios, descargas y opciones avanzadas.'
+      : 'Registrar viaje: datos, GPS, iniciar, finalizar y compartir.';
+    updateSupervisorDashboard();
     if(mode === 'supervisor'){
-      // Antes el usuario no veía cambios porque el panel podía estar colapsado.
       expandPanel();
       openSupervisorBlocks();
     } else {
@@ -1433,7 +1634,7 @@ GPS: ${m.gpsQuality}`;
   function toggleMode(){
     const next = state.mode === 'supervisor' ? 'driver' : 'supervisor';
     setMode(next);
-    toast(next === 'supervisor' ? 'Modo Supervisor activado: historial y opciones avanzadas visibles.' : 'Modo Conductor activado: pantalla simplificada para campo.');
+    toast(next === 'supervisor' ? 'Modo Supervisor activado: revisión, historial y opciones avanzadas.' : 'Modo Conductor activado: datos, inicio, parada y exportación del recorrido.');
   }
   function loadMode(){
     setMode(localStorage.getItem(STORAGE_MODE) === 'supervisor' ? 'supervisor' : 'driver');
@@ -1441,6 +1642,10 @@ GPS: ${m.gpsQuality}`;
 
   // -------------------- Eventos/UI --------------------
   function bindEvents(){
+    on(el.btnDemoGuided, 'click', ()=>startDemoTrip('guided'));
+    on(el.btnDemoInstant, 'click', ()=>startDemoTrip('instant'));
+    on(el.btnDemoFinish, 'click', ()=>finishDemoTrip(false));
+    on(el.btnDemoClear, 'click', resetDemoData);
     on(el.btnMode, 'click', toggleMode);
     on(el.btnStart, 'click', ()=>{ expandPanel(); startTrip(); });
     on(el.btnStop, 'click', stopTrip);
@@ -1539,12 +1744,13 @@ GPS: ${m.gpsQuality}`;
   function tick(){ updateMetrics(state.activeTrip || latestTrip()); }
   function registerServiceWorker(){
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('service-worker.js?v=5.4.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
+      navigator.serviceWorker.register('service-worker.js?v=5.6.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
     }
   }
   function escapeHtml(v){ return String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
 
   async function init(){
+    document.body.classList.add('trip-inactive');
     loadCfg(); loadMode(); loadHistory(); bindEvents();
     await initMap();
     loadActiveTrip();
@@ -1556,6 +1762,7 @@ GPS: ${m.gpsQuality}`;
     if(state.currentContext) renderContextLine(state.currentContext, { accuracy: state.currentPosition && state.currentPosition.accuracy });
     registerServiceWorker();
     loadLogoDataUrl();
+    setupDemoUi();
     el.bootMsg.classList.add('hidden');
     state.timer = setInterval(tick, 1000);
     // Autosalvado interno habilitado, sin mostrar mensajes técnicos en pantalla de campo.
@@ -1566,7 +1773,7 @@ GPS: ${m.gpsQuality}`;
       el.bootMsg.innerHTML = 'Esta app necesita abrirse por HTTPS (enlace https://) para usar GPS y compartir. Abra el enlace publicado, no el archivo local.';
       toast('Atención: sin HTTPS el GPS y el compartir no funcionarán. Use el enlace https:// publicado.', 8000);
     } else {
-      toast('CASUR Transportes GPS V5.4 lista. Active GPS para ver ubicación por finca, lote o referencia cercana.');
+      toast('CASUR Transportes GPS V5.6 lista. Use Modo Conductor para registrar o Modo Supervisor para revisar recorridos.');
     }
   }
 
