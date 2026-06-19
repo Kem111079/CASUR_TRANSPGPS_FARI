@@ -1,7 +1,7 @@
 {
-  "name": "CASUR Transportes GPS · Roles claros",
+  "name": "CASUR Transportes GPS · Conductor y envío",
   "short_name": "CASUR GPS",
-  "description": "PWA CASUR para recorridos de transporte con modo Conductor, modo Supervisor y simulador de presentación.",
+  "description": "PWA CASUR para recorridos de transporte con modo Conductor claro, envío/exportación y simulador inmersivo.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -61,5 +61,5 @@
       "purpose": "maskable"
     }
   ],
-  "id": "casur-transportes-gps-v5-6-roles-claros"
+  "id": "casur-transportes-gps-v5-7-simulador-inmersivo"
 }

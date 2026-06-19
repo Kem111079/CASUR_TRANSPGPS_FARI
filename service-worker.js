@@ -1,8 +1,8 @@
-const CACHE_NAME = 'casur-transportes-gps-v5-6-roles-claros-20260619-01';
+const CACHE_NAME = 'casur-transportes-gps-v5-8-conductor-envio-20260619-01';
 const APP_SHELL = [
-  './', './index.html', './simulador.html', './styles.css?v=5.6.0', './app.js?v=5.6.0', './manifest.json', './offline.html',
+  './', './index.html', './simulador.html', './styles.css?v=5.8.0', './app.js?v=5.8.0', './manifest.json', './offline.html',
   './assets/logo_casur.png',
-  './data/poligonos_casur.geojson?v=5.6.0', './data/metadata.json', './data/referencias_operativas.json?v=5.6.0', './data/maestro_fincas.json',
+  './data/poligonos_casur.geojson?v=5.8.0', './data/metadata.json', './data/referencias_operativas.json?v=5.8.0', './data/maestro_fincas.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/favicon.png'
 ];
 

@@ -11,9 +11,9 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
   <link rel="preconnect" href="https://unpkg.com" />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=5.6.0" />
+  <link rel="stylesheet" href="styles.css?v=5.8.0" />
   <script>
-    window.CASUR_BOOT = { version: '5.6.0-roles-claros', build: 'CASUR_TRANSPORTES_GPS_V5_6_ROLES_CLAROS' };
+    window.CASUR_BOOT = { version: '5.8.0-conductor-envio', build: 'CASUR_TRANSPORTES_GPS_V5_8_CONDUCTOR_ENVIO' };
     function loadCss(url){ return new Promise(function(resolve){ var l=document.createElement('link'); l.rel='stylesheet'; l.href=url; l.onload=resolve; l.onerror=resolve; document.head.appendChild(l); }); }
     function loadScript(url, timeoutMs){
       return new Promise(function(resolve,reject){
@@ -35,7 +35,7 @@
       catch(eP){ try { await loadScript('https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js', 15000); } catch(eP2){ console.warn('jsPDF no disponible; el PDF usará respaldo HTML imprimible.', eP2); } }
       try { await loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js', 12000); }
       catch(eA){ console.warn('autotable no disponible; el PDF usará tablas simples.', eA); }
-      try { await loadScript('app.js?v=5.6.0', 15000); }
+      try { await loadScript('app.js?v=5.8.0', 15000); }
       catch(e){ document.body.classList.add('boot-error'); document.getElementById('bootMsg').innerHTML = 'No se pudo cargar app.js. Revise conexión, caché o GitHub Pages.'; console.error(e); }
     }
     document.addEventListener('DOMContentLoaded', casurLoadLibraries);
@@ -51,7 +51,7 @@
           <h1>Transportes GPS</h1>
         </div>
       </div>
-      <div class="top-actions"><span id="roleTopChip" class="role-top-chip">🚛 Conductor</span><button id="btnMode" class="ghost-btn mode-btn" type="button">Modo Supervisor</button><button id="btnInstall" class="ghost-btn hidden" type="button">Instalar</button></div>
+      <div class="top-actions"><button id="btnMode" class="ghost-btn mode-btn" type="button">Modo Supervisor</button><button id="btnInstall" class="ghost-btn hidden" type="button">Instalar</button></div>
     </header>
 
     <div id="bootMsg" class="boot-msg">Cargando mapa y módulos de campo…</div>
@@ -90,30 +90,11 @@
         <div class="panel-grip" id="panelGrip" title="Abrir o cerrar bitácora"></div>
         <div class="panel-head compact-head">
           <div>
-            <div id="panelEyebrow" class="eyebrow">Modo Conductor</div>
-            <h2 id="panelTitle">Registrar recorrido</h2>
+            <div class="eyebrow">Bitácora GPS</div>
+            <h2>Recorrido operativo</h2>
           </div>
           <button id="btnCollapse" class="icon-btn" type="button" aria-label="Abrir o cerrar bitácora">⌄</button>
         </div>
-
-        <section id="roleBanner" class="role-banner role-driver" aria-live="polite">
-          <div class="role-symbol" id="roleSymbol">🚛</div>
-          <div>
-            <b id="roleTitle">Modo Conductor</b>
-            <span id="roleSubtitle">Registrar viaje: datos, GPS, iniciar, finalizar y compartir.</span>
-          </div>
-        </section>
-
-        <section id="driverSteps" class="driver-only driver-steps" aria-label="Pasos del conductor">
-          <span>1. Datos</span><span>2. Activar GPS</span><span>3. Iniciar</span><span>4. Detener/Exportar</span>
-        </section>
-
-        <section id="supervisorDashboard" class="supervisor-only supervisor-dashboard" aria-label="Panel rápido supervisor">
-          <article><span>Recorridos</span><b id="supTripCount">0</b></article>
-          <article><span>Pendientes</span><b id="supPendingCount">0</b></article>
-          <article><span>Km total</span><b id="supKmTotal">0.00</b></article>
-          <article><span>Último folio</span><b id="supLastFolio">—</b></article>
-        </section>
 
         <section class="status-grid compact-metrics">
           <article class="metric-card strong"><span>Distancia</span><b id="mDistance">0.00 km</b></article>
@@ -128,18 +109,23 @@
           <small>Active GPS para mostrar finca, lote o referencia cercana.</small>
         </div>
 
-        <section class="buttons-card flat main-actions driver-only">
+        <section id="driverQuickActions" class="driver-quick-actions driver-only" aria-label="Acciones rápidas del conductor">
+          <button id="btnDriverData" type="button">📝 Datos del viaje</button>
+          <button id="btnDriverSend" type="button">📤 Enviar / Exportar</button>
+        </section>
+
+        <section class="buttons-card flat main-actions">
           <button id="btnStart" class="primary-btn" type="button">▶ Iniciar recorrido</button>
           <button id="btnStop" class="danger-btn hidden" type="button">■ Finalizar recorrido</button>
           <button id="btnMarkPlace" class="secondary-btn important" type="button">📍 Marcar lugar</button>
           <button id="btnSaveCheckpoint" class="secondary-btn" type="button">★ Punto clave</button>
         </section>
 
-        <section id="driverGuide" class="driver-guide driver-only" aria-label="Guía rápida del conductor">
-          <b>Uso rápido:</b> llene conductor/placa, active GPS, inicie, finalice y descargue Excel/PDF.
+        <section id="driverGuide" class="driver-guide" aria-label="Guía rápida del conductor">
+          <b>Uso rápido:</b> toque “Datos del viaje”, registre conductor/placa, inicie, finalice y luego use “Enviar / Exportar”.
         </section>
 
-        <details id="tripDataBlock" class="control-block driver-main driver-only" open>
+        <details id="tripDataBlock" class="control-block driver-main" open>
           <summary>Datos del viaje</summary>
           <div class="form-grid compact-fields">
             <label>Conductor<input id="driver" autocomplete="name" placeholder="Nombre" /></label>
@@ -158,7 +144,7 @@
           <div id="contextBox" class="context-box">Referencia actual: sin punto GPS.</div>
         </details>
 
-        <details id="exportBlock" class="control-block driver-main driver-only">
+        <details id="exportBlock" class="control-block driver-main">
           <summary>Descargas y compartir</summary>
           <div class="exports-card flat-exports">
             <button id="btnPdf" type="button">📄 PDF del recorrido</button>
@@ -171,9 +157,8 @@
           <div class="technical-note">“Compartir por WhatsApp” adjunta el PDF y el Excel directamente en teléfonos compatibles. Si el teléfono no permite adjuntar, la app descarga los archivos y abre WhatsApp con el resumen en texto para que los anexe.</div>
         </details>
 
-        <details id="historyBlock" class="control-block supervisor-only supervisor-focus">
+        <details id="historyBlock" class="control-block supervisor-only">
           <summary>Historial de recorridos</summary>
-          <p class="supervisor-help">Revise rutas guardadas, descargue evidencias y prepare consolidados por placa/conductor.</p>
           <div class="history-tools">
             <button id="btnNewTrip" type="button">Nuevo recorrido</button>
             <button id="btnExportAll" type="button">Excel consolidado</button>

@@ -1,10 +1,10 @@
-/* CASUR Transportes GPS V5.6 Roles Claros
+/* CASUR Transportes GPS V5.8 Conductor Envío
    PWA de campo para recorridos, lotes/fincas, paradas y exportación operativa.
    Sin backend. Rastreo manual, visible y controlado por el usuario. */
 (function(){
   'use strict';
 
-  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '5.6.0-roles-claros';
+  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '5.8.0-conductor-envio';
   const DEMO_MODE = new URLSearchParams(window.location.search).get('demo') === '1' || /(^|#)demo(=1)?/i.test(window.location.hash || '');
   const STORAGE_ACTIVE = 'casur_transportes_active_trip_v4';
   const STORAGE_HISTORY = 'casur_transportes_history_v4';
@@ -29,7 +29,7 @@
     mDistance: $('mDistance'), mDuration: $('mDuration'), mSpeed: $('mSpeed'), mStops: $('mStops'),
     driver: $('driver'), plate: $('plate'), equipment: $('equipment'), tripType: $('tripType'), origin: $('origin'), destination: $('destination'), initialNote: $('initialNote'),
     cfgMinSec: $('cfgMinSec'), cfgMinMeters: $('cfgMinMeters'), cfgStopMin: $('cfgStopMin'), cfgStopSpeed: $('cfgStopSpeed'), cfgBadAcc: $('cfgBadAcc'), cfgGapMin: $('cfgGapMin'),
-    btnStart: $('btnStart'), btnStop: $('btnStop'), btnRestartGps: $('btnRestartGps'), btnSaveCheckpoint: $('btnSaveCheckpoint'), btnMarkPlace: $('btnMarkPlace'),
+    btnStart: $('btnStart'), btnStop: $('btnStop'), btnRestartGps: $('btnRestartGps'), btnSaveCheckpoint: $('btnSaveCheckpoint'), btnMarkPlace: $('btnMarkPlace'), btnDriverData: $('btnDriverData'), btnDriverSend: $('btnDriverSend'),
     autoReading: $('autoReading'), contextBox: $('contextBox'), locationLine: $('locationLine'),
     btnExcel: $('btnExcel'), btnReport: $('btnReport'), btnWhatsapp: $('btnWhatsapp'), btnCard: $('btnCard'), btnPdf: $('btnPdf'), btnShare: $('btnShare'),
     historyList: $('historyList'), btnClearHistory: $('btnClearHistory'), btnNewTrip: $('btnNewTrip'), btnExportAll: $('btnExportAll'),
@@ -69,7 +69,8 @@
     demoTimer:null,
     demoRunning:false,
     demoIndex:0,
-    demoPoints:[]
+    demoPoints:[],
+    demoLastPhase:null
   };
 
   const defaultCfg = {
@@ -181,16 +182,42 @@
   function expandPanel(){ setPanelCollapsed(false); }
   function togglePanel(){ setPanelCollapsed(!el.panel.classList.contains('collapsed')); }
   function openDriverBlocks(){
-    // En modo conductor, lo esencial siempre debe quedar accesible: datos del viaje y exportación.
-    if(el.tripDataBlock) el.tripDataBlock.open = !state.activeTrip;
+    // En modo conductor, lo esencial debe quedar accesible siempre: captura de datos y envío/exportación.
+    if(el.tripDataBlock) el.tripDataBlock.open = true;
     if(el.summaryBlock) el.summaryBlock.open = !!(state.activeTrip || latestTrip());
-    if(el.exportBlock) el.exportBlock.open = !!latestTrip() || !state.activeTrip;
+    if(el.exportBlock) el.exportBlock.open = true;
   }
   function openSupervisorBlocks(){
     if(el.historyBlock) el.historyBlock.open = true;
     if(el.advancedBlock) el.advancedBlock.open = true;
     if(el.exportBlock) el.exportBlock.open = true;
     if(el.summaryBlock) el.summaryBlock.open = true;
+  }
+  function showDriverData(){
+    setMode('driver');
+    expandPanel();
+    if(el.tripDataBlock) el.tripDataBlock.open = true;
+    if(el.summaryBlock && !state.activeTrip) el.summaryBlock.open = false;
+    setTimeout(()=>{
+      try{ (el.tripDataBlock || el.driver || el.panel).scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
+      if(el.driver && !el.driver.value) el.driver.focus({preventScroll:true});
+    }, 80);
+    toast('Ingrese conductor, placa/equipo, origen y destino. Luego active GPS e inicie el recorrido.');
+  }
+  function showDriverSend(){
+    setMode('driver');
+    expandPanel();
+    if(el.summaryBlock) el.summaryBlock.open = true;
+    if(el.exportBlock) el.exportBlock.open = true;
+    const trip = state.activeTrip || latestTrip();
+    setTimeout(()=>{ try{ (el.exportBlock || el.panel).scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){} }, 80);
+    if(state.activeTrip){
+      toast('El recorrido está activo. Puede descargar respaldo parcial, pero lo recomendable es finalizar antes de enviar.');
+    } else if(trip){
+      toast('Listo para enviar o descargar el último recorrido.');
+    } else {
+      toast('Aún no hay recorrido para enviar. Primero registre y finalice un recorrido.');
+    }
   }
   function getCfg(){
     return {
@@ -403,7 +430,7 @@
   }
   async function loadLots(){
     try{
-      const res = await fetch('data/poligonos_casur.geojson?v=5.6.0', { cache:'no-store' });
+      const res = await fetch('data/poligonos_casur.geojson?v=5.7.0', { cache:'no-store' });
       if(!res.ok) throw new Error('GeoJSON no disponible');
       state.lotsGeojson = await res.json();
       state.lotFeatures = (state.lotsGeojson.features || []).filter(f => f.geometry && ['Polygon','MultiPolygon'].includes(f.geometry.type));
@@ -427,7 +454,7 @@
     const local = loadLocalReferences();
     let defaults = [];
     try{
-      const res = await fetch('data/referencias_operativas.json?v=5.6.0', { cache:'no-store' });
+      const res = await fetch('data/referencias_operativas.json?v=5.7.0', { cache:'no-store' });
       if(res.ok){ const json = await res.json(); defaults = Array.isArray(json) ? json : (json.referencias || []); }
     }catch(e){ console.warn('Referencias operativas no cargadas', e); }
     const all = [];
@@ -820,9 +847,10 @@
   }
   function computeMetrics(trip){
     const pts = trip.points || [];
-    const dur = durationMs(trip.startedAt || trip.createdAt, trip.endedAt || nowIso());
+    const demoNow = trip.demo && trip.demoVirtualNow ? trip.demoVirtualNow : null;
+    const dur = durationMs(trip.startedAt || trip.createdAt, trip.endedAt || demoNow || nowIso());
     const dist = trip.distanceM || (pts.length > 1 ? pts.reduce((a,p,i)=>a+(i?haversine(pts[i-1],p):0),0) : 0);
-    const stopMs = (trip.stops || []).reduce((a,s)=>a+Number(s.durationMs||0),0) + (trip.stopCandidate ? durationMs(trip.stopCandidate.start, nowIso()) : 0);
+    const stopMs = (trip.stops || []).reduce((a,s)=>a+Number(s.durationMs||0),0) + (trip.stopCandidate ? durationMs(trip.stopCandidate.start, demoNow || nowIso()) : 0);
     const movingMs = Math.max(0, dur - stopMs);
     const avgKmh = dur>0 ? (dist/1000)/(dur/3600000) : 0;
     const movingKmh = movingMs>0 ? (dist/1000)/(movingMs/3600000) : 0;
@@ -1433,79 +1461,112 @@ GPS: ${m.gpsQuality}`;
   // -------------------- Simulador de presentación --------------------
   function isDemoMode(){ return !!state.demoMode; }
   function demoSetStatus(msg){ if(el.demoStatus) el.demoStatus.textContent = msg || ''; }
+  function demoScaleText(){ return 'Escala demo: 1 minuto de presentación ≈ 1 hora real del recorrido.'; }
   function setupDemoUi(){
     if(!isDemoMode()) return;
     document.body.classList.add('demo-mode');
     if(el.demoBar) el.demoBar.classList.remove('hidden');
-    demoSetStatus('Simulador listo. No usa GPS real. Sirve para presentar flujo, ruta, paradas, Excel y PDF.');
+    demoSetStatus('Simulador inmersivo listo. Ida y regreso por vías distintas hacia patio/báscula CASUR. '+demoScaleText());
     setBadge(el.gpsBadge, 'SIMULADOR · GPS ficticio', 'warn');
-    toast('Modo simulador activo: permite demostrar el recorrido sin moverse ni usar GPS real.', 7000);
+    toast('Modo simulador activo: escenario de ida y retorno sin GPS real, listo para vender la idea a logística y gerencia.', 7600);
     demoSeedFields(false);
   }
   function demoSeedFields(overwrite){
     const set = (node, value) => { if(node && (overwrite || !clean(node.value))) node.value = value; };
-    set(el.driver, 'Transportista demo');
+    set(el.driver, 'Conductor demo');
     set(el.plate, 'M-1024');
     set(el.equipment, 'CAM-24');
     if(el.tripType && (overwrite || !el.tripType.value)) el.tripType.value = 'Caña';
     set(el.origin, 'Finca San Lucas');
-    set(el.destination, 'Patio / Báscula CASUR');
-    set(el.initialNote, 'Simulación para presentación: recorrido de caña con parada operativa y tramo en carretera.');
+    set(el.destination, 'Patio / Báscula CASUR y retorno');
+    set(el.initialNote, 'Simulación ejecutiva: ciclo de transporte cañero con ida al ingenio por ruta interna y retorno por vía alterna. 1 minuto de presentación equivale aproximadamente a 1 hora del recorrido real.');
   }
   function ensureDemoReferences(){
     const demoRefs = [
-      {id:'DEMO-REF-ENTRADA-SAN-LUCAS', nombre:'Entrada San Lucas', tipo:'entrada de finca', lat:11.49405, lng:-85.83615, observacion:'Referencia demo para acceso a finca', createdAt:nowIso(), source:'demo presentación', manual:true},
-      {id:'DEMO-REF-CARRETERA', nombre:'Carretera Nandaime-CASUR', tipo:'carretera', lat:11.49840, lng:-85.82990, observacion:'Tramo demo fuera de lote/shape', createdAt:nowIso(), source:'demo presentación', manual:true},
-      {id:'DEMO-REF-BASCULA', nombre:'Báscula / Patio CASUR', tipo:'báscula', lat:11.50310, lng:-85.82360, observacion:'Destino operativo demo', createdAt:nowIso(), source:'demo presentación', manual:true}
+      {id:'DEMO-REF-SAN-LUCAS-CARGA', nombre:'Finca San Lucas · frente de carga', tipo:'finca/carga', lat:11.49396, lng:-85.83582, observacion:'Inicio del ciclo de transporte demo', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-ENTRADA-SAN-LUCAS', nombre:'Entrada San Lucas', tipo:'entrada de finca', lat:11.49440, lng:-85.83495, observacion:'Referencia demo para acceso a finca', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-CAMINO-INTERNO', nombre:'Camino interno hacia CASUR', tipo:'camino interno', lat:11.49635, lng:-85.83225, observacion:'Ruta de ida del camión cargado', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-CARRETERA-CASUR', nombre:'Carretera Nandaime-CASUR', tipo:'carretera', lat:11.49865, lng:-85.82920, observacion:'Tramo fuera de lotes para demostrar referencias operativas', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-BASCULA', nombre:'Báscula / Patio CASUR', tipo:'báscula', lat:11.50310, lng:-85.82360, observacion:'Destino operativo demo: pesaje/descarga', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-RETORNO-SUR', nombre:'Retorno por acceso sur', tipo:'ruta alterna', lat:11.50025, lng:-85.82475, observacion:'Retorno demo por vía distinta a la ida', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-CRUCE-OPERATIVO', nombre:'Cruce operativo / espera', tipo:'cruce', lat:11.49735, lng:-85.82720, observacion:'Punto de espera operativo en retorno', createdAt:nowIso(), source:'demo presentación', manual:true},
+      {id:'DEMO-REF-REGRESO-SAN-LUCAS', nombre:'Retorno a San Lucas', tipo:'entrada de finca', lat:11.49335, lng:-85.83495, observacion:'Cierre del ciclo demo', createdAt:nowIso(), source:'demo presentación', manual:true}
     ];
     const ids = new Set((state.references || []).map(r => r.id));
     demoRefs.forEach(r => { if(!ids.has(r.id)) state.references.push(r); });
     drawReferences();
   }
   function demoRoutePoints(){
-    // Ruta cercana a San Lucas 2009/2010 + tramo fuera de shape para demostrar referencias operativas.
-    const start = Date.now() - 74*60000;
+    // Escenario inmersivo: ciclo cañero de ida y retorno por vías distintas.
+    // Los minutos son minutos reales simulados. En la reproducción guiada, 1 minuto real del viaje = 1 segundo de presentación.
+    const start = Date.now() - 145*60000;
     const rows = [
-      [0,  11.49396, -85.83582, 0,  14],
-      [2,  11.49415, -85.83545, 8,  12],
-      [5,  11.49439, -85.83498, 13, 11],
-      [8,  11.49467, -85.83453, 16, 10],
-      [11, 11.49492, -85.83413, 12, 10],
-      // Parada de carga/espera cerca de San Lucas 2009
-      [13, 11.49496, -85.83403, 0,  9],
-      [16, 11.49497, -85.83402, 0,  9],
-      [20, 11.49496, -85.83401, 0,  9],
-      [24, 11.49497, -85.83402, 0,  9],
-      [28, 11.49520, -85.83366, 10, 11],
-      [31, 11.49558, -85.83310, 18, 13],
-      [34, 11.49604, -85.83255, 22, 16],
-      [38, 11.49660, -85.83183, 26, 17],
-      [42, 11.49722, -85.83112, 28, 16],
-      [46, 11.49784, -85.83044, 30, 17],
-      // Tramo en carretera: debe buscar referencia operativa, no lote.
-      [50, 11.49835, -85.82986, 24, 18],
-      [54, 11.49888, -85.82918, 25, 18],
-      [58, 11.49934, -85.82840, 27, 18],
-      // Parada corta/operativa en carretera
-      [60, 11.49942, -85.82818, 0,  16],
-      [64, 11.49943, -85.82818, 0,  16],
-      [67, 11.49943, -85.82817, 0,  16],
-      [69, 11.49986, -85.82750, 24, 17],
-      [71, 11.50072, -85.82620, 28, 18],
-      [73, 11.50165, -85.82486, 31, 18],
-      [74, 11.50242, -85.82395, 18, 19],
-      [75, 11.50310, -85.82360, 4,  18],
-      [76, 11.50310, -85.82360, 0,  18]
+      // min, lat, lng, velocidad, precisión, fase, lugar
+      [0,   11.49396, -85.83582, 0,  11, 'Preparación en finca', 'Finca San Lucas · frente de carga'],
+      [4,   11.49397, -85.83581, 0,  10, 'Preparación en finca', 'Finca San Lucas · frente de carga'],
+      [9,   11.49398, -85.83582, 0,  10, 'Preparación en finca', 'Finca San Lucas · frente de carga'],
+      [15,  11.49415, -85.83545, 8,  12, 'Ida cargado · salida de finca', 'Entrada San Lucas'],
+      [20,  11.49440, -85.83495, 12, 11, 'Ida cargado · salida de finca', 'Entrada San Lucas'],
+      [26,  11.49470, -85.83445, 16, 12, 'Ida cargado · camino interno', 'Camino interno hacia CASUR'],
+      [32,  11.49512, -85.83386, 18, 13, 'Ida cargado · camino interno', 'Camino interno hacia CASUR'],
+      [38,  11.49574, -85.83315, 21, 14, 'Ida cargado · camino interno', 'Camino interno hacia CASUR'],
+      [44,  11.49640, -85.83225, 23, 15, 'Ida cargado · camino interno', 'Camino interno hacia CASUR'],
+      [50,  11.49705, -85.83135, 25, 15, 'Ida cargado · camino interno', 'Camino interno hacia CASUR'],
+      [56,  11.49775, -85.83040, 27, 16, 'Ida cargado · carretera', 'Carretera Nandaime-CASUR'],
+      [62,  11.49855, -85.82925, 29, 17, 'Ida cargado · carretera', 'Carretera Nandaime-CASUR'],
+      [68,  11.49935, -85.82810, 28, 18, 'Ida cargado · carretera', 'Carretera Nandaime-CASUR'],
+      [74,  11.50020, -85.82690, 25, 17, 'Ida cargado · acceso ingenio', 'Acceso a patio CASUR'],
+      [80,  11.50118, -85.82558, 22, 18, 'Ida cargado · acceso ingenio', 'Acceso a patio CASUR'],
+      [86,  11.50230, -85.82428, 15, 18, 'Ingreso a patio', 'Patio CASUR'],
+      [91,  11.50310, -85.82360, 5,  16, 'Pesaje / descarga', 'Báscula / Patio CASUR'],
+      // parada de descarga y documentación
+      [98,  11.50310, -85.82360, 0,  15, 'Pesaje / descarga', 'Báscula / Patio CASUR'],
+      [106, 11.50309, -85.82359, 0,  15, 'Pesaje / descarga', 'Báscula / Patio CASUR'],
+      [114, 11.50310, -85.82360, 0,  15, 'Pesaje / descarga', 'Báscula / Patio CASUR'],
+      // retorno por ruta alterna, distinta a la ida
+      [120, 11.50235, -85.82395, 12, 16, 'Retorno vacío · vía alterna', 'Salida patio CASUR'],
+      [126, 11.50135, -85.82420, 20, 17, 'Retorno vacío · vía alterna', 'Retorno por acceso sur'],
+      [132, 11.50025, -85.82475, 27, 18, 'Retorno vacío · vía alterna', 'Retorno por acceso sur'],
+      [138, 11.49910, -85.82585, 31, 18, 'Retorno vacío · vía alterna', 'Ruta alterna sur'],
+      [144, 11.49795, -85.82680, 30, 17, 'Retorno vacío · vía alterna', 'Cruce operativo / espera'],
+      // parada corta en retorno
+      [149, 11.49735, -85.82720, 0,  16, 'Espera operativa en retorno', 'Cruce operativo / espera'],
+      [154, 11.49735, -85.82719, 0,  16, 'Espera operativa en retorno', 'Cruce operativo / espera'],
+      [160, 11.49655, -85.82810, 24, 17, 'Retorno vacío · camino alterno', 'Camino alterno a San Lucas'],
+      [166, 11.49565, -85.82930, 26, 17, 'Retorno vacío · camino alterno', 'Camino alterno a San Lucas'],
+      [172, 11.49488, -85.83085, 25, 16, 'Retorno vacío · camino alterno', 'Camino alterno a San Lucas'],
+      [178, 11.49425, -85.83250, 22, 15, 'Retorno vacío · acceso finca', 'Acceso alterno San Lucas'],
+      [184, 11.49365, -85.83395, 16, 14, 'Retorno vacío · acceso finca', 'Acceso alterno San Lucas'],
+      [190, 11.49335, -85.83495, 8,  13, 'Cierre de ciclo', 'Retorno a San Lucas'],
+      [195, 11.49335, -85.83495, 0,  13, 'Cierre de ciclo', 'Retorno a San Lucas']
     ];
     return rows.map((r,i) => {
       const prev = i ? rows[i-1] : null;
       let heading = 0;
       if(prev){ heading = bearing({lat:prev[1],lng:prev[2]}, {lat:r[1],lng:r[2]}) || 0; }
-      return { timestamp:new Date(start + r[0]*60000).toISOString(), lat:r[1], lng:r[2], speedKmh:r[3], accuracy:r[4], headingRaw:heading };
+      return {
+        realMinute:r[0],
+        timestamp:new Date(start + r[0]*60000).toISOString(),
+        lat:r[1], lng:r[2], speedKmh:r[3], accuracy:r[4], headingRaw:heading,
+        phase:r[5], place:r[6]
+      };
     });
   }
   function demoAsGeoPosition(p){
     return { timestamp:new Date(p.timestamp).getTime(), coords:{ latitude:p.lat, longitude:p.lng, accuracy:p.accuracy, speed:(p.speedKmh||0)/3.6, heading:p.headingRaw } };
+  }
+  function demoAddPhaseEvent(p){
+    if(!state.activeTrip || !p) return;
+    if(state.demoLastPhase !== p.phase){
+      state.demoLastPhase = p.phase;
+      addEvent('DEMO_FASE', `${p.phase} · ${p.place || ''}`);
+      state.activeTrip.checkpoints = state.activeTrip.checkpoints || [];
+      state.activeTrip.checkpoints.push({
+        timestamp:p.timestamp, lat:p.lat, lng:p.lng,
+        referencia:p.place || p.phase, tipoReferencia:'fase demo',
+        note:`Inicio de fase demo: ${p.phase}${p.place ? ' · '+p.place : ''}`
+      });
+    }
   }
   function startDemoTrip(mode){
     if(!isDemoMode()){ toast('Abra simulador.html o agregue ?demo=1 al enlace para usar el simulador.'); return; }
@@ -1518,43 +1579,56 @@ GPS: ${m.gpsQuality}`;
     stopWatch(false);
     demoSeedFields(true);
     ensureDemoReferences();
+    setMode('driver');
     state.activeTrip = buildTrip();
     state.activeTrip.demo = true;
-    state.activeTrip.demoMode = mode || 'guiado';
+    state.activeTrip.demoMode = mode || 'guided';
+    state.activeTrip.demoScale = '1 minuto demo = 1 hora real';
     state.activeTrip.status = 'active';
+    state.activeTrip.fields.observacionInicial = 'DEMO INMERSIVO · Ida cargado hacia patio/báscula CASUR y retorno vacío por ruta alterna. Escala de presentación: 1 minuto de demo equivale aproximadamente a 1 hora del recorrido real.';
     state.routeFitDone = false;
     state.followMode = true;
     state.demoPoints = demoRoutePoints();
     state.demoIndex = 0;
     state.demoRunning = true;
+    state.demoLastPhase = null;
     state.routeLayer && state.routeLayer.clearLayers();
     state.arrowLayer && state.arrowLayer.clearLayers();
     state.markerLayer && state.markerLayer.clearLayers();
     setActiveUi(true);
     expandPanel();
     setBadge(el.gpsBadge, 'SIMULADOR · grabando', 'warn');
-    addEvent('DEMO_INICIADO', mode === 'instant' ? 'Recorrido demo generado de forma instantánea.' : 'Recorrido demo guiado iniciado para presentación.');
+    addEvent('DEMO_INICIADO', mode === 'instant' ? 'Recorrido demo generado de forma instantánea.' : 'Recorrido demo inmersivo iniciado. Escala: 1 minuto de demo equivale a 1 hora real.');
     saveActiveTrip('Demo iniciado');
-    demoSetStatus(mode === 'instant' ? 'Generando recorrido demo completo…' : 'Demo guiada en ejecución: se simulan puntos GPS, paradas, finca/lote y carretera.');
+    demoSetStatus(mode === 'instant' ? 'Generando ciclo completo de ida y retorno…' : 'Demo inmersiva en ejecución · ida por ruta interna y retorno por vía alterna · '+demoScaleText());
     if(mode === 'instant'){
-      state.demoPoints.forEach(p => handlePosition(demoAsGeoPosition(p)));
+      state.demoPoints.forEach(p => { demoAddPhaseEvent(p); handlePosition(demoAsGeoPosition(p)); if(state.activeTrip){ state.activeTrip.demoVirtualNow = p.timestamp; state.activeTrip.endedAt = p.timestamp; } });
       finishDemoTrip(true);
       return;
     }
     feedNextDemoPoint();
-    state.demoTimer = setInterval(feedNextDemoPoint, 900);
   }
   function feedNextDemoPoint(){
     if(!state.activeTrip || !state.demoRunning){ clearDemoTimer(); return; }
     const p = state.demoPoints[state.demoIndex++];
     if(!p){ finishDemoTrip(true); return; }
+    demoAddPhaseEvent(p);
     handlePosition(demoAsGeoPosition(p));
+    if(state.activeTrip){ state.activeTrip.demoVirtualNow = p.timestamp; state.activeTrip.endedAt = p.timestamp; }
     const pct = Math.min(100, Math.round((state.demoIndex / state.demoPoints.length) * 100));
+    const elapsedMin = p.realMinute || 0;
+    const elapsedHours = (elapsedMin / 60).toFixed(1);
     const last = state.activeTrip && state.activeTrip.points && state.activeTrip.points[state.activeTrip.points.length-1];
-    const lugar = last ? (last.referencia || contextText(last) || 'Sin referencia') : 'esperando punto';
-    demoSetStatus(`Demo guiada ${pct}% · ${lugar}`);
+    const lugar = last ? (last.referencia || contextText(last) || p.place || 'Sin referencia') : (p.place || 'esperando punto');
+    demoSetStatus(`${pct}% · ${p.phase} · ${lugar} · ${elapsedHours} h reales simuladas · ${demoScaleText()}`);
+    const next = state.demoPoints[state.demoIndex];
+    if(!next){ state.demoTimer = setTimeout(()=>finishDemoTrip(true), 900); return; }
+    const deltaMin = Math.max(1, Number(next.realMinute || 0) - Number(p.realMinute || 0));
+    // 1 minuto real del viaje = 1 segundo en la presentación. Cap mínimo para que no sea brusco.
+    const waitMs = Math.max(800, deltaMin * 1000);
+    state.demoTimer = setTimeout(feedNextDemoPoint, waitMs);
   }
-  function clearDemoTimer(){ if(state.demoTimer){ clearInterval(state.demoTimer); state.demoTimer = null; } state.demoRunning = false; }
+  function clearDemoTimer(){ if(state.demoTimer){ clearTimeout(state.demoTimer); state.demoTimer = null; } state.demoRunning = false; }
   function finishDemoTrip(auto){
     clearDemoTimer();
     const trip = state.activeTrip;
@@ -1562,14 +1636,14 @@ GPS: ${m.gpsQuality}`;
     const last = trip.points && trip.points[trip.points.length-1];
     closeStopCandidate(trip, last ? last.timestamp : nowIso(), true);
     trip.fields = trip.fields || {};
-    if(!trip.fields.observacionFinal) trip.fields.observacionFinal = 'Recorrido demo de presentación. No corresponde a GPS real.';
-    trip.endedAt = last ? last.timestamp : nowIso();
+    if(!trip.fields.observacionFinal) trip.fields.observacionFinal = 'Recorrido demo de presentación. No corresponde a GPS real. Muestra ida cargada hacia patio/báscula y retorno vacío por ruta alterna.';
+    trip.endedAt = last ? last.timestamp : (trip.demoVirtualNow || nowIso());
     trip.status = 'finished';
     trip.syncStatus = 'local_pendiente';
     trip.synced = false;
     trip.deviceId = trip.deviceId || getDeviceId();
     if(last) trip.endContext = { finca:last.finca, lote:last.lote, zona:last.zona, referencia:last.referencia, tipoReferencia:last.tipoReferencia, lat:last.lat, lng:last.lng };
-    addEvent('DEMO_FINALIZADO', auto ? 'El simulador finalizó automáticamente.' : 'El usuario finalizó el demo manualmente.');
+    addEvent('DEMO_FINALIZADO', auto ? 'El simulador finalizó automáticamente con ciclo ida-retorno.' : 'El usuario finalizó el demo manualmente.');
     trip.metrics = computeMetrics(trip);
     trip.hashLocal = simpleHash(JSON.stringify({ folio:trip.folio, id:trip.id, deviceId:trip.deviceId, startedAt:trip.startedAt, endedAt:trip.endedAt, points:(trip.points||[]).length, distanceM:trip.metrics.distanceM, demo:true }));
     state.history.unshift(stripRuntime(trip));
@@ -1583,8 +1657,8 @@ GPS: ${m.gpsQuality}`;
     updateMetrics(trip);
     renderHistory();
     setBadge(el.gpsBadge, 'SIMULADOR · recorrido generado', 'ok');
-    demoSetStatus('Demo finalizada. Ya puede mostrar ruta, resumen, historial, Excel, PDF y WhatsApp.');
-    toast('Demo finalizada: recorrido guardado en historial local. Puede descargar Excel/PDF para presentarlo.', 6500);
+    demoSetStatus('Demo finalizada. Ya puede mostrar ruta ida-retorno, resumen, historial, Excel, PDF y WhatsApp con datos del ciclo simulado.');
+    toast('Demo finalizada: ciclo ida-retorno guardado. Descargue Excel/PDF para mostrar evidencia operativa.', 7200);
   }
   function resetDemoData(){
     if(state.activeTrip && !state.activeTrip.demo){ toast('Hay un recorrido real activo. No se limpió.'); return; }
@@ -1593,7 +1667,8 @@ GPS: ${m.gpsQuality}`;
     state.history = (state.history || []).filter(t => !t.demo);
     saveHistory(); renderHistory(); prepareNewTrip();
     setBadge(el.gpsBadge, 'SIMULADOR · GPS ficticio', 'warn');
-    demoSetStatus('Datos demo limpiados. Listo para correr otra demostración.');
+    state.demoLastPhase = null;
+    demoSetStatus('Datos demo limpiados. Listo para correr otra demostración inmersiva.');
     toast('Se limpiaron los recorridos demo.');
   }
 
@@ -1647,6 +1722,8 @@ GPS: ${m.gpsQuality}`;
     on(el.btnDemoFinish, 'click', ()=>finishDemoTrip(false));
     on(el.btnDemoClear, 'click', resetDemoData);
     on(el.btnMode, 'click', toggleMode);
+    on(el.btnDriverData, 'click', showDriverData);
+    on(el.btnDriverSend, 'click', showDriverSend);
     on(el.btnStart, 'click', ()=>{ expandPanel(); startTrip(); });
     on(el.btnStop, 'click', stopTrip);
     on(el.btnStopBar, 'click', stopTrip);
@@ -1744,7 +1821,7 @@ GPS: ${m.gpsQuality}`;
   function tick(){ updateMetrics(state.activeTrip || latestTrip()); }
   function registerServiceWorker(){
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('service-worker.js?v=5.6.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
+      navigator.serviceWorker.register('service-worker.js?v=5.8.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
     }
   }
   function escapeHtml(v){ return String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
@@ -1773,7 +1850,7 @@ GPS: ${m.gpsQuality}`;
       el.bootMsg.innerHTML = 'Esta app necesita abrirse por HTTPS (enlace https://) para usar GPS y compartir. Abra el enlace publicado, no el archivo local.';
       toast('Atención: sin HTTPS el GPS y el compartir no funcionarán. Use el enlace https:// publicado.', 8000);
     } else {
-      toast('CASUR Transportes GPS V5.6 lista. Use Modo Conductor para registrar o Modo Supervisor para revisar recorridos.');
+      toast('CASUR Transportes GPS V5.7 lista. Use Modo Conductor para registrar o Modo Supervisor para revisar recorridos.');
     }
   }
 

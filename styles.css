@@ -324,3 +324,64 @@ body.demo-mode #gpsBadge{background:#FFF8E3;color:#7A5600;border-color:#E9C85C;}
   .supervisor-dashboard{grid-template-columns:1fr 1fr;}
   .mode-supervisor .panel.collapsed .supervisor-dashboard{display:grid!important;}
 }
+
+/* ================== V5.7 · Simulador inmersivo ================== */
+body.demo-mode .demo-bar{
+  background:linear-gradient(135deg,#FFF3BD,#FFFFFF 45%,#EAF5EA);
+  border-bottom:1px solid rgba(242,183,5,.55);
+}
+body.demo-mode .demo-bar b::after{
+  content:' · ida al ingenio + retorno alterno';
+  color:#1F6B46;
+  font-weight:900;
+}
+body.demo-mode .demo-actions button:first-child{
+  background:#0B2D22;
+}
+body.demo-mode .demo-actions button:nth-child(2){
+  background:#1F6B46;
+}
+@media (max-width:620px){
+  body.demo-mode .demo-bar span{font-size:11.5px;}
+}
+
+/* ================== V5.8 · Modo Conductor con captura y envío visibles ================== */
+.driver-quick-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin:6px 0 8px;
+}
+.driver-quick-actions button{
+  border:1px solid #D7E6DC;
+  border-radius:16px;
+  background:#FFFFFF;
+  color:#123C2C;
+  font-weight:950;
+  font-size:14px;
+  padding:12px 10px;
+  box-shadow:0 6px 18px rgba(16,37,27,.06);
+}
+.driver-quick-actions button:nth-child(2){
+  background:#FFF6DD;
+  border-color:#F2D47A;
+  color:#795200;
+}
+.mode-supervisor .driver-quick-actions{display:none!important;}
+.mode-driver .driver-quick-actions{display:grid!important;}
+.panel.collapsed .driver-quick-actions{display:grid!important;margin:4px 0 6px;}
+.panel.collapsed .driver-quick-actions button{min-height:38px;padding:9px 8px;font-size:13px;border-radius:13px;}
+.mode-driver .panel.collapsed{max-height:286px!important;}
+.mode-driver .panel.collapsed .main-actions{margin-top:3px;}
+.mode-driver .panel.collapsed .main-actions .secondary-btn{min-height:38px;}
+.mode-driver .panel:not(.collapsed) #tripDataBlock{display:block!important;}
+.mode-driver .panel:not(.collapsed) #exportBlock{display:block!important;}
+.conductor-help-note{
+  background:#F8FBF9;border:1px dashed #CFE0D5;border-radius:14px;padding:9px 10px;
+  font-size:12px;font-weight:850;color:#51635A;line-height:1.35;margin:8px 0 0;
+}
+@media (max-width:520px){
+  .driver-quick-actions{gap:7px;margin:4px 0 6px;}
+  .driver-quick-actions button{font-size:12.8px;padding:9px 6px;min-height:38px;}
+  .mode-driver .panel.collapsed{max-height:292px!important;}
+}

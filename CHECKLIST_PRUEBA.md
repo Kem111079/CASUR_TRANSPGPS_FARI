@@ -103,13 +103,10 @@ El GPS con la pantalla apagada o con la app totalmente en segundo plano no está
 - [ ] Cambiar a Modo Supervisor y revisar historial.
 - [ ] Usar **Limpiar demo** si se quiere repetir la demostración.
 
-## 10. Roles claros V5.6
+## Checklist V5.8 · Modo Conductor
 
-- [ ] En Modo Conductor se ve banner “Modo Conductor · Registrar recorrido”.
-- [ ] En Modo Conductor se muestran datos del viaje, Activar GPS, Iniciar/Finalizar, Marcar lugar y descargas.
-- [ ] En Modo Conductor NO se ve historial ni opciones avanzadas.
-- [ ] En Modo Supervisor se ve banner “Modo Supervisor · Revisión y control”.
-- [ ] En Modo Supervisor se ve panel rápido con recorridos, pendientes, km total y último folio.
-- [ ] En Modo Supervisor se ve historial y opciones avanzadas.
-- [ ] En Modo Supervisor NO se ve el formulario de captura del conductor.
-- [ ] Si hay recorrido activo, se conserva la posibilidad de finalizar aunque se cambie de modo.
+- [ ] En móvil, Modo Conductor muestra **Datos del viaje** aunque la bitácora esté compacta.
+- [ ] El botón **Datos del viaje** abre el formulario de conductor, placa, equipo, origen y destino.
+- [ ] El botón **Enviar / Exportar** abre PDF, Excel y WhatsApp.
+- [ ] En Modo Supervisor se ocultan los botones rápidos del conductor.
+- [ ] El simulador inmersivo mantiene la ruta ida-retorno y permite exportar reporte.

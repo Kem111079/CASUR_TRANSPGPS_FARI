@@ -68,12 +68,13 @@ Flujo recomendado:
 
 El simulador no rastrea ni usa la ubicación real. Para uso en campo, abrir la app normal sin `?demo=1`.
 
-## V5.6 · Diferencia práctica entre modos
+## V5.8 · Flujo rápido del conductor
 
-### Para conductor
+1. Toque **Datos del viaje**.
+2. Escriba conductor, placa/equipo, origen y destino.
+3. Toque **Activar GPS**.
+4. Toque **Iniciar recorrido**.
+5. Al terminar, toque **Finalizar recorrido**.
+6. Toque **Enviar / Exportar** para descargar PDF/Excel o compartir por WhatsApp.
 
-Use **Modo Conductor**. Solo necesita llenar datos, activar GPS, iniciar, finalizar y descargar/compartir el recorrido.
-
-### Para supervisor
-
-Use **Modo Supervisor**. Ahí se revisan recorridos guardados, folios, rutas anteriores, Excel/PDF, consolidado y opciones avanzadas. Este modo no es para capturar viajes diarios, sino para controlar y auditar.
+Aunque la bitácora esté compacta, los botones **Datos del viaje** y **Enviar / Exportar** quedan visibles para no perder al usuario.

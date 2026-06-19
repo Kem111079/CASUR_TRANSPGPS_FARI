@@ -105,16 +105,16 @@ o directamente:
 
 > Nota: el simulador no representa GPS real. Es únicamente para demostración ejecutiva y capacitación.
 
-## V5.6 · Roles claros Conductor / Supervisor
+## V5.8 · Modo Conductor con captura y envío visibles
 
-Esta versión separa mejor la experiencia de uso:
+Esta versión corrige el flujo observado en campo/presentación: en **Modo Conductor** ahora siempre quedan visibles dos acciones rápidas aun con la bitácora compacta:
 
-### Modo Conductor
+- **Datos del viaje**: abre el formulario para ingresar conductor, placa/equipo, tipo de viaje, origen y destino.
+- **Enviar / Exportar**: abre el resumen y las opciones para PDF, Excel, WhatsApp, impresión e imagen resumen.
 
-Enfocado en captura de recorrido. Muestra datos del viaje, activar GPS, iniciar/detener, ubicación actual, métricas y descargas del recorrido actual. Oculta historial, opciones avanzadas, capas y datos técnicos.
+La lógica de roles queda así:
 
-### Modo Supervisor
+- **Conductor**: captura datos, activa GPS, inicia/finaliza, marca lugares y envía/exporta el recorrido.
+- **Supervisor**: revisa historial, rutas guardadas, exportación consolidada y opciones avanzadas.
 
-Enfocado en revisión y control. Muestra panel rápido de recorridos, pendientes locales, kilómetros acumulados, último folio, historial, exportación consolidada y opciones avanzadas. Oculta el formulario de captura para que la pantalla no se confunda con la operación del conductor.
-
-La separación es visual/operativa dentro de la PWA. La seguridad real por usuario, permisos y administrador central queda para la fase con backend/app híbrida.
+El simulador inmersivo se mantiene para presentación gerencial.
