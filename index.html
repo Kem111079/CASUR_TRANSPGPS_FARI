@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#003b2f" />
+  <meta name="description" content="CASUR Transportes GPS · PWA para registrar y resumir recorridos operativos de transporte en campo." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="CASUR GPS" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CASUR Transportes GPS · V1</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png" />
+  <link rel="stylesheet" href="./styles.css?v=transportes_gps_v1" />
+</head>
+<body>
+  <div id="loader" class="loader">
+    <div class="loader-card">
+      <img src="./assets/logo_casur.png" alt="CASUR" />
+      <h1>CASUR Transportes GPS</h1>
+      <p id="loaderText">Cargando PWA de recorridos...</p>
+      <div class="loader-bar"><span></span></div>
+    </div>
+  </div>
+
+  <div id="appShell" class="app-shell hidden">
+    <header class="topbar">
+      <button id="btnMenu" class="icon-btn" type="button" aria-label="Abrir panel">☰</button>
+      <div class="topbar-title">
+        <span>CASUR Transportes GPS</span>
+        <small>Registro operativo de recorridos</small>
+      </div>
+      <div id="gpsPill" class="gps-pill idle"><span></span> GPS inactivo</div>
+    </header>
+
+    <aside id="sidePanel" class="side-panel">
+      <div class="panel-brand">
+        <img src="./assets/logo_casur.png" alt="CASUR" />
+        <div>
+          <span>Control operativo</span>
+          <h2>Rutas Campo</h2>
+          <p>PWA local · sin rastreo oculto</p>
+        </div>
+      </div>
+
+      <section class="panel-section consent-box">
+        <h3>Privacidad operativa</h3>
+        <p>El GPS solo registra cuando se pulsa <b>Iniciar recorrido</b>. El usuario puede finalizar, exportar o borrar sus registros locales.</p>
+      </section>
+
+      <section class="panel-section">
+        <h3>Datos del recorrido</h3>
+        <label>Conductor
+          <input id="driverName" class="control" autocomplete="name" placeholder="Nombre del conductor o supervisor" />
+        </label>
+        <label>Placa
+          <input id="vehiclePlate" class="control" placeholder="Ej. M 123456" />
+        </label>
+        <label>Código camión/equipo
+          <input id="equipmentCode" class="control" placeholder="Ej. C-018 / Tractor-04" />
+        </label>
+        <label>Tipo de viaje
+          <select id="tripType" class="control">
+            <option value="Caña">Caña</option>
+            <option value="Insumos">Insumos</option>
+            <option value="Personal">Personal</option>
+            <option value="Maquinaria">Maquinaria</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </label>
+        <div class="grid-2">
+          <label>Origen
+            <input id="origin" class="control" placeholder="Origen" />
+          </label>
+          <label>Destino
+            <input id="destination" class="control" placeholder="Destino" />
+          </label>
+        </div>
+        <label>Observación inicial
+          <textarea id="initialNote" class="control" rows="3" placeholder="Opcional"></textarea>
+        </label>
+      </section>
+
+      <section class="panel-section settings-box">
+        <h3>Filtro GPS</h3>
+        <div class="grid-2">
+          <label>Cada segundos
+            <input id="minSeconds" class="control" type="number" min="3" max="30" step="1" value="4" />
+          </label>
+          <label>o cada metros
+            <input id="minMeters" class="control" type="number" min="5" max="100" step="1" value="12" />
+          </label>
+        </div>
+        <div class="grid-2">
+          <label>Parada min.
+            <input id="stopMinutes" class="control" type="number" min="1" max="30" step="1" value="2" />
+          </label>
+          <label>Precisión alerta m
+            <input id="accuracyWarn" class="control" type="number" min="15" max="150" step="5" value="50" />
+          </label>
+        </div>
+        <p class="hint">Regla V1: guardar pocos puntos, evitar duplicados y no sumar distancia con saltos de mala precisión.</p>
+      </section>
+
+      <section class="panel-section">
+        <h3>Acciones</h3>
+        <div class="action-stack">
+          <button id="btnStart" class="btn primary" type="button">Iniciar recorrido</button>
+          <button id="btnFinish" class="btn danger" type="button" disabled>Finalizar recorrido</button>
+          <button id="btnResumeGps" class="btn warning" type="button" disabled>Reactivar GPS</button>
+          <button id="btnCenter" class="btn secondary" type="button">Centrar GPS</button>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h3>Exportar / compartir</h3>
+        <div class="action-grid">
+          <button id="btnCsvPoints" class="btn secondary" type="button">CSV puntos</button>
+          <button id="btnCsvSummary" class="btn secondary" type="button">CSV resumen</button>
+          <button id="btnReport" class="btn secondary" type="button">Reporte HTML</button>
+          <button id="btnWhatsapp" class="btn secondary" type="button">WhatsApp</button>
+          <button id="btnCard" class="btn secondary" type="button">Tarjeta PNG</button>
+          <button id="btnClearLocal" class="btn ghost-danger" type="button">Borrar local</button>
+        </div>
+      </section>
+
+      <section class="panel-section history-box">
+        <h3>Historial local</h3>
+        <div id="historyList" class="history-list">Sin recorridos guardados.</div>
+      </section>
+    </aside>
+    <div id="panelBackdrop" class="panel-backdrop"></div>
+
+    <main class="main-map-area">
+      <div id="map" class="map"></div>
+      <div id="mapFallback" class="map-fallback hidden">
+        <h2>Mapa no disponible</h2>
+        <p>No se pudo cargar Leaflet. El registro GPS y las exportaciones pueden seguir funcionando si el navegador permite ubicación.</p>
+      </div>
+
+      <section class="hero-card">
+        <div>
+          <span class="eyebrow">Estado del recorrido</span>
+          <h1 id="routeStateTitle">Listo para iniciar</h1>
+          <p id="routeStateText">Complete los datos básicos y pulse Iniciar recorrido.</p>
+        </div>
+        <button id="btnInstall" class="install-btn hidden" type="button">Instalar app</button>
+      </section>
+
+      <section class="kpi-grid">
+        <article class="kpi-card">
+          <span>Distancia</span>
+          <strong id="kpiDistance">0.00 km</strong>
+          <small id="kpiPoints">0 puntos</small>
+        </article>
+        <article class="kpi-card">
+          <span>Duración</span>
+          <strong id="kpiDuration">00:00:00</strong>
+          <small id="kpiStart">Sin inicio</small>
+        </article>
+        <article class="kpi-card">
+          <span>Velocidad</span>
+          <strong id="kpiSpeed">0.0 km/h</strong>
+          <small id="kpiMaxSpeed">Máx. 0.0</small>
+        </article>
+        <article class="kpi-card">
+          <span>Paradas</span>
+          <strong id="kpiStops">0</strong>
+          <small id="kpiStopped">0 min detenido</small>
+        </article>
+      </section>
+
+      <section class="bottom-summary" id="bottomSummary">
+        <div class="summary-head">
+          <div>
+            <span>Resumen automático</span>
+            <h2 id="summaryTitle">Sin recorrido finalizado</h2>
+          </div>
+          <button id="btnToggleSummary" class="mini-btn" type="button">Ver detalle</button>
+        </div>
+        <p id="executiveReading">Cuando finalice el recorrido se generará una lectura ejecutiva con distancia, duración, paradas y calidad GPS.</p>
+        <div id="summaryDetails" class="summary-details hidden">
+          <div class="detail-row"><span>Conductor</span><b id="sumDriver">—</b></div>
+          <div class="detail-row"><span>Placa / Equipo</span><b id="sumVehicle">—</b></div>
+          <div class="detail-row"><span>Origen → Destino</span><b id="sumRoute">—</b></div>
+          <div class="detail-row"><span>Inicio / Fin</span><b id="sumTimes">—</b></div>
+          <div class="detail-row"><span>Calidad GPS</span><b id="sumQuality">—</b></div>
+        </div>
+      </section>
+
+      <div id="activeBar" class="active-bar hidden">
+        <div><b id="activeDistance">0.00 km</b><span id="activeDuration">00:00:00</span></div>
+        <button id="btnFinishBottom" type="button">Finalizar</button>
+      </div>
+
+      <canvas id="cardCanvas" class="hidden" width="1200" height="900"></canvas>
+    </main>
+  </div>
+
+  <script>
+    (function(){
+      function setLoader(msg){ var el = document.getElementById('loaderText'); if(el) el.textContent = msg; }
+      function loadCss(href){
+        return new Promise(function(resolve){
+          var l = document.createElement('link');
+          l.rel = 'stylesheet';
+          l.href = href;
+          l.onload = resolve;
+          l.onerror = resolve;
+          document.head.appendChild(l);
+          setTimeout(resolve, 3000);
+        });
+      }
+      function loadScript(src, timeoutMs){
+        return new Promise(function(resolve, reject){
+          var done = false;
+          var s = document.createElement('script');
+          var t = setTimeout(function(){ if(done) return; done = true; s.remove(); reject(new Error('Tiempo agotado: ' + src)); }, timeoutMs || 9000);
+          s.onload = function(){ if(done) return; done = true; clearTimeout(t); resolve(); };
+          s.onerror = function(){ if(done) return; done = true; clearTimeout(t); reject(new Error('No se pudo cargar: ' + src)); };
+          s.src = src;
+          document.body.appendChild(s);
+        });
+      }
+      async function boot(){
+        setLoader('Cargando librería de mapa...');
+        await Promise.all([
+          loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'),
+          loadCss('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css')
+        ]);
+        try{
+          await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 9000);
+        }catch(e1){
+          console.warn('[CASUR Transportes GPS] Falla unpkg, intentando jsDelivr', e1);
+          setLoader('Reintentando mapa...');
+          try{ await loadScript('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js', 9000); }
+          catch(e2){ console.error(e2); window.__LEAFLET_FAILED__ = true; }
+        }
+        setLoader('Cargando motor GPS...');
+        try{ await loadScript('./app.js?v=transportes_gps_v1', 9000); }
+        catch(err){ console.error(err); setLoader('No se pudo cargar app.js. Verifique que todos los archivos estén subidos.'); }
+        setTimeout(function(){
+          var loader = document.getElementById('loader');
+          if(loader && !loader.classList.contains('hidden') && !window.__CASUR_TRANSPORTES_READY__){
+            setLoader('La app tardó en cargar. Recargue, limpie caché o revise conexión.');
+          }
+        }, 12000);
+      }
+      if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();
+    })();
+  </script>
+</body>
+</html>
