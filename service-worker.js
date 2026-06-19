@@ -1,8 +1,8 @@
-const CACHE_NAME = 'casur-transportes-gps-simulador-v2-ui-reporte-20260619-02';
+const CACHE_NAME = 'casur-transportes-gps-simulador-v2-ui-reporte-20260619-01';
 const APP_SHELL = [
-  './', './index.html', './app.html', './simulador.html', './styles.css?v=5.10.0', './app.js?v=5.10.0', './manifest.json', './offline.html',
+  './', './index.html', './app.html', './simulador.html', './styles.css?v=6.0.0', './app.js?v=6.0.0', './manifest.json', './offline.html',
   './assets/logo_casur.png',
-  './data/poligonos_casur.geojson?v=5.10.0', './data/metadata.json', './data/referencias_operativas.json?v=5.10.0', './data/maestro_fincas.json',
+  './data/poligonos_casur.geojson?v=6.0.0', './data/metadata.json', './data/referencias_operativas.json?v=6.0.0', './data/maestro_fincas.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/favicon.png'
 ];
 
@@ -33,7 +33,6 @@ function isExternalCached(url){
 function isAppShellFile(url){
   return url.pathname.endsWith('/') ||
          url.pathname.endsWith('/index.html') ||
-         url.pathname.endsWith('/app.html') ||
          url.pathname.endsWith('/simulador.html') ||
          url.pathname.endsWith('/app.js') ||
          url.pathname.endsWith('/styles.css') ||

@@ -1,7 +1,7 @@
 {
-  "name": "CASUR Transportes GPS · Simulador V2",
-  "short_name": "CASUR Sim",
-  "description": "Simulador inmersivo de recorridos de transporte cañero con bitácora compacta, mapa operativo y reporte ejecutivo.",
+  "name": "CASUR Transportes GPS",
+  "short_name": "CASUR GPS",
+  "description": "PWA operativa para registrar recorridos de transporte en campo e ingenio, con GPS real, reportes, Excel y control operativo.",
   "start_url": "index.html",
   "scope": "./",
   "display": "standalone",

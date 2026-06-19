@@ -4,10 +4,10 @@
 (function(){
   'use strict';
 
-  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '5.10.0-simulador-ui-reporte';
+  const APP_VERSION = (window.CASUR_BOOT && window.CASUR_BOOT.version) || '6.0.0-app-sin-simulador';
   const URL_PARAMS = new URLSearchParams(window.location.search);
-  const DEMO_MODE = URL_PARAMS.get('demo') === '1' || /(^|#)demo(=1)?/i.test(window.location.hash || '');
-  const DEMO_AUTOSTART = (function(){ const v=(URL_PARAMS.get('autostart')||'').toLowerCase(); return (v==='guided' || v==='instant') ? v : ''; })();
+  const DEMO_MODE = false;
+  const DEMO_AUTOSTART = '';
   const STORAGE_ACTIVE = 'casur_transportes_active_trip_v4';
   const STORAGE_HISTORY = 'casur_transportes_history_v4';
   const STORAGE_CFG = 'casur_transportes_cfg_v4';
@@ -1606,15 +1606,7 @@ GPS: ${m.gpsQuality}`;
   function isDemoMode(){ return !!state.demoMode; }
   function demoSetStatus(msg){ if(el.demoStatus) el.demoStatus.textContent = msg || ''; }
   function demoScaleText(){ return 'Escala demo: 1 minuto de presentación ≈ 1 hora real del recorrido.'; }
-  function setupDemoUi(){
-    if(!isDemoMode()) return;
-    document.body.classList.add('demo-mode');
-    if(el.demoBar) el.demoBar.classList.remove('hidden');
-    demoSetStatus('Simulador inmersivo listo. Ida y regreso por vías distintas hacia patio/báscula CASUR. '+demoScaleText());
-    setBadge(el.gpsBadge, 'SIMULADOR · GPS ficticio', 'warn');
-    toast('Modo simulador activo: escenario de ida y retorno sin GPS real, listo para vender la idea a logística y gerencia.', 7600);
-    demoSeedFields(false);
-  }
+  function setupDemoUi(){ return; }
   function demoSeedFields(overwrite){
     const set = (node, value) => { if(node && (overwrite || !clean(node.value))) node.value = value; };
     set(el.driver, 'Conductor demo');
@@ -1965,7 +1957,7 @@ GPS: ${m.gpsQuality}`;
   function tick(){ updateMetrics(state.activeTrip || latestTrip()); }
   function registerServiceWorker(){
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('service-worker.js?v=5.10.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
+      navigator.serviceWorker.register('service-worker.js?v=6.0.0').then(reg => { reg.update && reg.update(); }).catch(console.warn);
     }
   }
   function escapeHtml(v){ return String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
@@ -1998,7 +1990,7 @@ GPS: ${m.gpsQuality}`;
       el.bootMsg.innerHTML = 'Esta app necesita abrirse por HTTPS (enlace https://) para usar GPS y compartir. Abra el enlace publicado, no el archivo local.';
       toast('Atención: sin HTTPS el GPS y el compartir no funcionarán. Use el enlace https:// publicado.', 8000);
     } else {
-      toast('CASUR Transportes GPS Simulador V2 lista. Use Modo Conductor para registrar o Modo Supervisor para revisar recorridos.');
+      toast('CASUR Transportes GPS V6 lista. Use Modo Conductor para registrar o Modo Supervisor para revisar recorridos.');
     }
   }
 
